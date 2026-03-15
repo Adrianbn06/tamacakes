@@ -3,211 +3,89 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TamaCakes - Gestión de Producción</title>
+  <title>TamaCakes</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body>
 
   <div id="loginScreen" class="login-container">
     <div class="login-card">
-      <div class="logo-circle">🧁</div>
+      <div class="logo-container">
+        <img src="https://img.icons8.com/fluency/96/cupcake.png" alt="Logo">
+      </div>
       <h1>TamaCakes</h1>
-      <p>Gestión de Inventario y Producción</p>
+      <p class="subtitle">Gestión de Inventario</p>
       
       <div class="login-form">
-        <input type="email" id="loginEmail" placeholder="Correo electrónico">
+        <input type="email" id="loginEmail" placeholder="Correo">
         <input type="password" id="loginPass" placeholder="Contraseña">
-        <button class="btn btn-primary btn-full" onclick="login()">Entrar al Sistema</button>
+        <button class="btn-login" onclick="login()">Ingresar</button>
         <p id="loginMsg" class="login-error"></p>
       </div>
     </div>
   </div>
 
   <div id="app" style="display: none;">
-    <header class="main-header">
+    <header>
       <div class="header-content">
-        <div class="brand">
-          <span class="logo-mini">🧁</span>
-          <div>
-            <h1>TamaCakes Admin</h1>
-            <span id="syncMsg" class="sync-status">Sincronizado ✓</span>
-          </div>
-        </div>
+        <h1>TamaCakes Admin</h1>
         <div class="user-info">
-          <span id="userName">Cargando...</span>
-          <button class="btn btn-outline btn-sm" onclick="logout()">Cerrar Sesión</button>
+          <span id="userName"></span>
+          <span id="syncMsg" style="font-size: 0.7rem; display: block; color: #888;"></span>
+          <button class="btn-logout" onclick="logout()">Salir</button>
         </div>
       </div>
     </header>
 
-    <main class="container">
-      
-      <div id="alertasGlobales" style="margin-bottom: 1.5rem;"></div>
-
+    <div class="container">
       <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('inv', this)">🌾 Materia Prima</button>
-        <button class="tab-btn" onclick="switchTab('rct', this)">📜 Recetas</button>
-        <button class="tab-btn" onclick="switchTab('pro', this)">🍰 Productos</button>
-        <button class="tab-btn" onclick="switchTab('tar', this)">📝 Tareas (Cocina)</button>
-        <button class="tab-btn" onclick="switchTab('ord', this)">🛍️ Pedidos</button>
+        <button class="tab-btn active" onclick="switchTab('inv', this)">Materia Prima</button>
+        <button class="tab-btn" onclick="switchTab('rct', this)">Recetas</button>
+        <button class="tab-btn" onclick="switchTab('pro', this)">Productos</button>
+        <button class="tab-btn" onclick="switchTab('tar', this)">Cocina</button>
+        <button class="tab-btn" onclick="switchTab('ord', this)">Ventas</button>
       </div>
 
+      <div id="alertasGlobales"></div>
+
       <div class="tab-content">
-        
         <div id="tab-inv" class="tab-pane active">
           <div class="card">
-            <h2 class="card-title">➕ Registrar Materia Prima</h2>
+            <h3>Registrar Ingrediente</h3>
             <div class="form-grid">
-              <div class="fg"><label>Nombre</label><input type="text" id="invNombre" placeholder="Ej. Harina"></div>
-              <div class="fg"><label>Categoría</label><input type="text" id="invCategoria" placeholder="Ej. Secos"></div>
-              <div class="fg">
-                <label>Unidad de Medida</label>
-                <select id="invUnidad">
-                  <option value="g">Gramos (g)</option>
-                  <option value="kg">Kilogramos (kg)</option>
-                  <option value="ml">Mililitros (ml)</option>
-                  <option value="L">Litros (L)</option>
-                  <option value="unidades">Unidades</option>
-                </select>
-              </div>
-              <div class="fg"><label>Stock Actual</label><input type="number" id="invCantidad" min="0" step="0.01"></div>
-              <div class="fg"><label>Costo Unitario ($)</label><input type="number" id="invCosto" min="0" step="0.0001"></div>
+              <input type="text" id="invNombre" placeholder="Nombre">
+              <input type="text" id="invCategoria" placeholder="Categoría">
+              <select id="invUnidad">
+                <option value="g">Gramos (g)</option>
+                <option value="unidades">Unidades</option>
+              </select>
+              <input type="number" id="invCantidad" placeholder="Cantidad">
+              <input type="number" id="invCosto" placeholder="Costo Unitario">
             </div>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="addMateriaPrima()">Guardar en Bodega</button>
+            <button class="btn-save" onclick="addMateriaPrima()">Guardar</button>
           </div>
-
-          <div class="card">
-            <h2 class="card-title">📋 Inventario de Materia Prima</h2>
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr><th>Nombre</th><th>Categoría</th><th>Disponibles</th><th>Costo Unidad</th><th>Acción</th></tr>
-                </thead>
-                <tbody id="tbodyInv"></tbody>
-              </table>
-            </div>
-          </div>
+          <table id="tablaInv">
+            <thead><tr><th>Nombre</th><th>Stock</th><th>Costo</th><th>Acción</th></tr></thead>
+            <tbody id="tbodyInv"></tbody>
+          </table>
         </div>
 
         <div id="tab-rct" class="tab-pane">
           <div class="card">
-            <h2 class="card-title">➕ Crear Nueva Receta</h2>
-            <div class="form-grid">
-              <div class="fg"><label>Nombre de la Receta</label><input type="text" id="rctNombre" placeholder="Ej. Bizcocho Vainilla"></div>
-            </div>
-            <div class="recipe-builder">
-              <h3>Ingredientes y Proporciones:</h3>
-              <div id="listaIngredientesReceta"></div>
-              <button class="btn btn-outline btn-sm" onclick="addFilaIngrediente()">+ Añadir Ingrediente</button>
-            </div>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="guardarReceta()">Guardar Receta</button>
+            <h3>Nueva Receta</h3>
+            <input type="text" id="rctNombre" placeholder="Nombre de la receta">
+            <div id="listaIngredientesReceta" class="ingredientes-container"></div>
+            <button class="btn-add" onclick="addFilaIngrediente()">+ Agregar Ingrediente</button>
+            <button class="btn-save" onclick="guardarReceta()">Guardar Receta</button>
           </div>
-
-          <div class="card">
-            <h2 class="card-title">📜 Catálogo de Recetas</h2>
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr><th>Nombre</th><th>Ingredientes</th><th>Costo de Producción</th><th>Acción</th></tr>
-                </thead>
-                <tbody id="tbodyRct"></tbody>
-              </table>
-            </div>
-          </div>
+          <table id="tablaRct">
+            <thead><tr><th>Receta</th><th>Ingredientes</th><th>Costo Prep.</th><th>Acción</th></tr></thead>
+            <tbody id="tbodyRct"></tbody>
+          </table>
         </div>
 
-        <div id="tab-pro" class="tab-pane">
-          <div class="card">
-            <h2 class="card-title">➕ Registrar Producto para Venta</h2>
-            <div class="form-grid">
-              <div class="fg"><label>Nombre del Producto</label><input type="text" id="proNombre"></div>
-              <div class="fg"><label>Categoría</label><input type="text" id="proCategoria"></div>
-              <div class="fg"><label>Receta Asociada</label><select id="proReceta"></select></div>
-              <div class="fg"><label>Precio de Venta ($)</label><input type="number" id="proPrecio" step="0.01"></div>
-            </div>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="addProducto()">Añadir a Catálogo</button>
-          </div>
-
-          <div class="card">
-            <h2 class="card-title">🍰 Stock de Productos Terminados</h2>
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr><th>Producto</th><th>Stock</th><th>Costo</th><th>Precio</th><th>Margen</th><th>Acción</th></tr>
-                </thead>
-                <tbody id="tbodyPro"></tbody>
-              </table>
-            </div>
-          </div>
         </div>
-
-        <div id="tab-tar" class="tab-pane">
-          <div class="card bg-light">
-            <h2 class="card-title">📝 Orden de Producción</h2>
-            <div class="form-grid">
-              <div class="fg"><label>¿Qué vamos a cocinar?</label><select id="tarProducto"></select></div>
-              <div class="fg"><label>Cantidad</label><input type="number" id="tarCantidad" min="1"></div>
-              <div class="fg"><label>Fecha Límite</label><input type="date" id="tarFecha"></div>
-              <div class="fg"><label>Notas</label><input type="text" id="tarDesc"></div>
-            </div>
-            <button class="btn btn-primary" style="margin-top:1rem" onclick="addTarea()">Agendar Tarea</button>
-          </div>
-
-          <div class="card">
-            <h2 class="card-title">👨‍🍳 Órdenes en Curso</h2>
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr><th>Producción</th><th>Fecha</th><th>Estado</th><th>Acción</th></tr>
-                </thead>
-                <tbody id="tbodyTar"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div id="tab-ord" class="tab-pane">
-          <div class="card">
-            <h2 class="card-title">🛍️ Registrar Venta</h2>
-            <div class="form-grid">
-              <div class="fg"><label>Cliente</label><input type="text" id="ordCliente"></div>
-              <div class="fg"><label>Entrega</label><input type="date" id="ordFechaEnt"></div>
-              <div class="fg">
-                <label>Pago</label>
-                <select id="ordEstadoPago" onchange="toggleAdelanto()">
-                  <option value="Por pagar">Por pagar</option>
-                  <option value="Adelanto">Adelanto</option>
-                  <option value="Pagado">Pagado</option>
-                </select>
-              </div>
-              <div class="fg" id="divAdelanto" style="display:none;"><label>Monto $</label><input type="number" id="ordAdelanto"></div>
-              <input type="hidden" id="ordFechaPed"> <input type="hidden" id="ordMetodo" value="Efectivo">
-            </div>
-            
-            <div id="ordenItems" style="margin-top:1rem;"></div>
-            <div style="display:flex; gap:10px; margin-top:1rem;">
-              <button class="btn btn-outline" onclick="addItemRow()">+ Añadir Producto</button>
-              <button class="btn btn-primary" onclick="agendarPedido()">Finalizar Venta</button>
-            </div>
-          </div>
-
-          <div class="card">
-            <h2 class="card-title">💰 Historial de Ventas</h2>
-            <div class="table-container">
-              <table>
-                <thead>
-                  <tr><th>Cliente</th><th>Detalle</th><th>Total</th><th>Pago</th><th>Entrega</th></tr>
-                </thead>
-                <tbody id="tbodyOrd"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </main>
+    </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
