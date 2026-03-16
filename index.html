@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TamaCakes — Producción y Ventas</title>
+  <title>TamaCakes — Producción</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,7 +16,6 @@
   <div class="login-card">
     <div class="login-logo">Tama<span>Cakes</span></div>
     <p class="login-sub">Gestión Bajo Pedido</p>
-    
     <div class="fg" style="margin-bottom:1rem; text-align:left;">
        <input type="email" id="loginEmail" placeholder="Correo electrónico">
     </div>
@@ -57,19 +56,25 @@
 
     <div class="tab-pane active" id="tab-inv">
       <div class="card">
-        <div class="card-title">Registrar / Editar Ingrediente</div>
+        <div class="card-title">Registrar / Actualizar Ingrediente</div>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">El sistema reconoce mayúsculas o minúsculas. Si escribes un ingrediente que ya existe, se SUMARÁ al stock y se guardará la fecha en su historial.</p>
         <div class="form-grid">
           <div class="fg"><label>Nombre</label><input type="text" id="invNombre" placeholder="Ej: Harina"></div>
-          <div class="fg"><label>Categoría</label><select id="invCategoria"><option>Harinas y Secos</option><option>Lácteos</option><option>Grasas y Aceites</option><option>Azúcares</option><option>Huevos</option><option>Chocolates y Cacao</option><option>Frutas y Secos</option><option>Esencias y Sabor</option><option>Colorantes</option><option>Decoración</option><option>Empaques</option><option>Otros</option></select></div>
+          <div class="fg">
+            <label>Categoría</label>
+            <select id="invCategoria">
+              <option>Harinas y Secos</option><option>Lácteos</option><option>Grasas y Aceites</option><option>Azúcares</option><option>Huevos</option><option>Chocolates y Cacao</option><option>Frutas y Secos</option><option>Esencias y Sabor</option><option>Colorantes</option><option>Decoración</option><option>Empaques</option><option>Otros</option>
+            </select>
+          </div>
           <div class="fg"><label>Unidad</label><select id="invUnidad"><option value="g">Gramos (g)</option><option value="kg">Kilos (kg)</option><option value="ml">Mililitros (ml)</option><option value="L">Litros (L)</option><option value="unidades">Unidades</option></select></div>
-          <div class="fg"><label>Stock Actual</label><input type="number" id="invCantidad" min="0" step="0.01"></div>
-          <div class="fg"><label>Fecha Compra</label><input type="date" id="invFechaCompra"></div>
-          <div class="fg"><label>&nbsp;</label><button id="btnGuardarInv" class="btn btn-primary" onclick="addMateriaPrima()">+ Añadir</button></div>
+          <div class="fg"><label>Cant. a Ingresar</label><input type="number" id="invCantidad" min="0" step="0.01" placeholder="Ej. 1000"></div>
+          <div class="fg"><label>Fecha de Compra</label><input type="date" id="invFechaCompra"></div>
+          <div class="fg"><label>&nbsp;</label><button id="btnGuardarInv" class="btn btn-primary" onclick="addMateriaPrima()">+ Añadir / Sumar</button></div>
         </div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Nombre</th><th>Categoría</th><th>Disponibles</th><th>Fecha Compra</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Nombre</th><th>Categoría</th><th>Stock Total</th><th>Historial</th><th>Acciones</th></tr></thead>
           <tbody id="tbodyInv"></tbody>
         </table>
       </div>
@@ -83,7 +88,7 @@
           <div class="fg"><label>Rendimiento (Cant. que produce)</label><input type="number" id="rctRendimiento" min="1" value="1" placeholder="Ej: 12"></div>
         </div>
         <div style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--border);">
-          <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios:</label>
+          <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios para toda la preparación:</label>
           <div id="listaIngredientesReceta" style="margin-top:10px;"></div>
           <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente a la fórmula</button>
         </div>
@@ -175,6 +180,14 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<div id="modalHistorial" class="modal">
+  <div class="modal-content">
+    <h3 id="modalHistTitulo" style="margin-top:0; color:var(--brown);">Historial de Compras</h3>
+    <ul id="modalHistLista" class="modal-list"></ul>
+    <button class="btn btn-outline" style="width:100%;" onclick="document.getElementById('modalHistorial').style.display='none'">Cerrar</button>
   </div>
 </div>
 
