@@ -53,7 +53,7 @@ function cargarDatos(email) {
     recetas = (data.recetas||[]).map(x=>({...x, rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]')}));
     productos = (data.productos||[]).map(x=>({...x, precio_venta:Number(x.precio_venta)}));
     tareas = (data.tareas||[]).map(x=>({...x, cantidad_producir:Number(x.cantidad_producir)}));
-    pedidos = (data.pedidos||[]).map(x=>({...x, items:JSON.parse(x.items||'[]'), adelanto:Number(x.adelanto), notas:x.notas||''}));
+    pedidos = (data.pedidos||[]).map(x=>({...x, items:JSON.parse(x.items||'[]'), adelanto:Number(x.adelanto), notas:x.notas||'', celular:x.celular||''}));
 
     document.getElementById('userName').textContent = email.split('@')[0];
     document.getElementById('loginScreen').style.display = 'none';
@@ -170,65 +170,93 @@ function updateSelects() {
   document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${p.nombre}</option>`).join(''); });
 }
 
+// ✅ EL BLOQUEO FUE ELIMINADO. PASA DIRECTO.
 function agendarPedido() {
-  const c=document.getElementById('ordCliente').value, fE=document.getElementById('ordFechaEnt').value, fP=document.getElementById('ordFechaPed').value, m=document.getElementById('ordMetodo').value, stP=document.getElementById('ordEstadoPago').value, notas=document.getElementById('ordNotas').value;
+  const c=document.getElementById('ordCliente').value, cel=document.getElementById('ordCelular').value, fE=document.getElementById('ordFechaEnt').value, fP=document.getElementById('ordFechaPed').value, m=document.getElementById('ordMetodo').value, stP=document.getElementById('ordEstadoPago').value, notas=document.getElementById('ordNotas').value;
   const ad=stP==='Adelanto'?Number(document.getElementById('ordAdelanto').value):(stP==='Pagado'?-1:0);
   if(!c)return alert('Falta el nombre del cliente');
   
   const items = [...document.querySelectorAll('.item-row')].map(r=>({productoId:r.querySelector('.ordProd').value, cantidad:Number(r.querySelector('.ordCant').value)}));
   if(!items.length || items.some(i=>i.cantidad<=0)) return alert('Ingresa cantidades válidas.');
   
-  // YA NO DESCONTAMOS INVENTARIO AQUÍ. LO DEJAMOS PASAR DIRECTO A LA COCINA.
   const pedidoId = genId();
-  pedidos.push({id:pedidoId, cliente:c, items, notas:notas, fecha_pedido:fP, fecha_entrega:fE, metodo_pago:m, estado_pago:stP, adelanto:ad, estado:ESTADOS[0]});
+  pedidos.push({id:pedidoId, cliente:c, celular:cel, items, notas:notas, fecha_pedido:fP, fecha_entrega:fE, metodo_pago:m, estado_pago:stP, adelanto:ad, estado:ESTADOS[0]});
   
   items.forEach(it => { 
-    tareas.push({id:genId(), producto_id:it.productoId, pedido_id:pedidoId, cantidad_producir:it.cantidad, fecha_limite:fE, descripcion:`Venta de: ${c}${notas?' | Notas: '+notas:''}`, estado:'Pendiente'}); 
+    tareas.push({id:genId(), producto_id:it.productoId, pedido_id:pedidoId, cantidad_producir:it.cantidad, fecha_limite:fE, descripcion:`Cliente: ${c}${cel?' | Tel: '+cel:''}${notas?' | Notas: '+notas:''}`, estado:'Pendiente'}); 
   });
 
   Promise.all([syncOrd(), syncTar()]).then(()=>{ 
-    document.getElementById('ordenItems').innerHTML=''; addItemRow(); document.getElementById('ordCliente').value=''; document.getElementById('ordNotas').value=''; document.getElementById('ordAdelanto').value='';
-    renderTodo(); alert('✅ Venta guardada con éxito. Revisar alertas de stock en la pestaña de Cocina.'); 
+    document.getElementById('ordenItems').innerHTML=''; addItemRow(); 
+    document.getElementById('ordCliente').value=''; document.getElementById('ordCelular').value=''; 
+    document.getElementById('ordNotas').value=''; document.getElementById('ordAdelanto').value='';
+    renderTodo(); alert('✅ Venta guardada con éxito.'); 
   });
 }
 
 function editarPedido(id) {
   const ord = pedidos.find(x=>x.id===id); if(!ord) return;
-  const nuevasNotas = prompt("Editar Notas del Pedido (Ej. Alergias, empaque especial):", ord.notas);
+  const nuevasNotas = prompt("Editar Notas del Pedido:", ord.notas);
   if(nuevasNotas !== null) {
     ord.notas = nuevasNotas;
-    tareas.forEach(t => { if(t.pedido_id === id) t.descripcion = `Venta de: ${ord.cliente}${ord.notas?' | Notas: '+ord.notas:''}`; });
+    tareas.forEach(t => { if(t.pedido_id === id) t.descripcion = `Cliente: ${ord.cliente}${ord.celular?' | Tel: '+ord.celular:''}${ord.notas?' | Notas: '+ord.notas:''}`; });
     Promise.all([syncOrd(), syncTar()]).then(renderTodo);
   }
 }
 
 function eliminarPedido(id) {
-  if(!confirm('¿Eliminar esta venta? Las órdenes de cocina que no estén completadas se borrarán.')) return;
-  // Solo borramos las tareas asociadas a esta venta
+  if(!confirm('¿Eliminar esta venta? Las órdenes de cocina se borrarán.')) return;
   tareas = tareas.filter(t => t.pedido_id !== id);
   pedidos = pedidos.filter(x => x.id !== id);
-  Promise.all([syncOrd(), syncTar()]).then(()=>{ renderTodo(); });
+  Promise.all([syncOrd(), syncTar()]).then(renderTodo);
+}
+
+// Función que revisa si UNA ORDEN en particular no tiene stock para sus tareas pendientes
+function checkStockFaltantePedido(orden) {
+  if (orden.estado === 'Entregado' || orden.estado === 'Listo para entrega') return false;
+  let matNecesaria = {};
+  let tareasPendientes = tareas.filter(t => t.pedido_id === orden.id && t.estado !== 'Completado');
+  
+  for(const t of tareasPendientes) {
+    const p = productos.find(x=>x.id===t.producto_id); if(!p) continue;
+    const rct = recetas.find(x=>x.id===p.id_receta); if(!rct) continue;
+    rct.ingredientes.forEach(ing => {
+      const mat = inventario.find(x=>x.id===ing.id_materia); if(!mat) return;
+      const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
+      if(!matNecesaria[mat.id]) matNecesaria[mat.id] = 0; matNecesaria[mat.id] += req;
+    });
+  }
+  for(const id in matNecesaria) {
+    const mat = inventario.find(x=>x.id===id);
+    if(mat && mat.cantidad < matNecesaria[id]) return true; // Falta stock
+  }
+  return false;
 }
 
 function renderOrd() {
   const tb = document.getElementById('tbodyOrd');
-  if(!pedidos.length) { tb.innerHTML='<tr><td colspan="6" class="empty">Sin ventas registradas</td></tr>'; return; }
+  if(!pedidos.length) { tb.innerHTML='<tr><td colspan="7" class="empty">Sin ventas registradas</td></tr>'; return; }
+  
   tb.innerHTML = pedidos.map(o=>{
     let tot=0; const txt=o.items.map(it=>{const p=productos.find(x=>x.id===it.productoId); if(p)tot+=p.precio_venta*it.cantidad; return `${p?p.nombre:'?'} x${it.cantidad}`;}).join('<br>');
     const adReal = o.estado_pago==='Pagado'?tot:o.adelanto;
     const stSel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="const p=pedidos.find(x=>x.id==='${o.id}');if(p){p.estado=this.value;syncOrd();}">${ESTADOS.map(e=>`<option ${o.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
+    
+    const avisoStock = checkStockFaltantePedido(o) ? '<span style="color:var(--rose); font-weight:bold; font-size:0.75rem;">⚠️ Falta Stock</span>' : '<span style="color:var(--sage); font-size:0.75rem;">✓ Listo</span>';
+
     return `<tr>
-      <td><strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.notas?'Notas: '+o.notas:''}</span></td>
+      <td><strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
       <td style="font-size:.8rem">${txt}</td>
       <td style="font-size:.8rem">P: ${o.fecha_pedido}<br>E: ${o.fecha_entrega}</td>
-      <td style="font-size:.8rem">Total: $${tot.toFixed(2)}<br>Falta: $${(tot-adReal).toFixed(2)}<br><span class="badge badge-gray">${o.estado_pago}</span></td>
+      <td style="font-size:.8rem">Total: $${tot.toFixed(2)}<br>Falta: $${(tot-adReal).toFixed(2)}</td>
       <td>${stSel}</td>
       <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarPedido('${o.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarPedido('${o.id}')">🗑️</button></td>
+      <td>${avisoStock}</td>
     </tr>`;
   }).join('');
 }
 
-// 5. COCINA Y ANÁLISIS DE STOCK
+// 5. COCINA Y ANÁLISIS DE STOCK EN VIVO
 function cambiarEstadoTar(id, st) { 
   const t = tareas.find(x=>x.id===id); if(!t)return; 
   
@@ -237,7 +265,6 @@ function cambiarEstadoTar(id, st) {
     const rct = recetas.find(x=>x.id===p?.id_receta);
     if(!rct) return alert('No se puede completar: Producto sin receta.');
 
-    // Verificar si hay stock real antes de dejarlo completar
     let falta = false; let msgFalta = [];
     rct.ingredientes.forEach(ing => {
       const mat = inventario.find(x=>x.id===ing.id_materia);
@@ -251,7 +278,7 @@ function cambiarEstadoTar(id, st) {
       return alert('❌ IMPOSIBLE COCINAR: Te faltan ingredientes en bodega:\n' + msgFalta.join(', '));
     }
 
-    // SI TIENE STOCK, se descuenta de verdad de la bodega
+    // SI TIENE STOCK, Descuenta
     rct.ingredientes.forEach(ing => {
       const mat = inventario.find(x=>x.id===ing.id_materia);
       const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
@@ -262,8 +289,7 @@ function cambiarEstadoTar(id, st) {
     Promise.all([syncTar(), syncInv()]).then(renderTodo);
 
   } else {
-    t.estado = st; 
-    syncTar().then(renderTodo); 
+    t.estado = st; syncTar().then(renderTodo); 
   }
 }
 
@@ -276,12 +302,10 @@ function renderTar() {
     const p=productos.find(x=>x.id===t.producto_id);
     const rct=recetas.find(x=>x.id===p?.id_receta);
     
-    // ANÁLISIS DE STOCK EN TIEMPO REAL
     let alertasHtml = '';
     if (t.estado !== 'Completado') {
-      if(!rct) {
-        alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Producto sin receta vinculada</span>';
-      } else {
+      if(!rct) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Producto sin receta vinculada</span>'; } 
+      else {
         let faltantes = [];
         rct.ingredientes.forEach(ing => {
           const mat = inventario.find(x=>x.id===ing.id_materia);
