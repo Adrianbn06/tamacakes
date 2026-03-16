@@ -54,12 +54,25 @@ async function apiCall(action, payload={}) {
   return await res.json();
 }
 
+// Lector seguro del Historial
+function parseHistorial(str, cant) {
+  if(!str) return [];
+  try {
+    const parsed = JSON.parse(str);
+    if(Array.isArray(parsed)) return parsed;
+    return [{fecha: str, cantidad: cant}]; 
+  } catch(e) {
+    return [{fecha: str, cantidad: cant}]; // Si no es un array, asume que era un string de fecha antiguo
+  }
+}
+
 function cargarDatos(email) {
   apiCall('getAll', { email }).then(data => {
     if (data.error) { auth.signOut(); return; }
     currentUser = { email, rol: data.rol };
     
-    inventario = (data.inventario||[]).map(x=>({...x, id:Number(x.id), cantidad:Number(x.cantidad), fecha_compra:x.fecha_compra||''}));
+    // AHORA INVENTARIO PROCESA EL HISTORIAL OCULTO EN fecha_compra
+    inventario = (data.inventario||[]).map(x=>({...x, id:Number(x.id), cantidad:Number(x.cantidad), historial: parseHistorial(x.fecha_compra, x.cantidad)}));
     recetas = (data.recetas||[]).map(x=>({...x, id:Number(x.id), rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]').map(i=>({...i, id_materia:Number(i.id_materia), cantidad:Number(i.cantidad)}))}));
     productos = (data.productos||[]).map(x=>({...x, id:Number(x.id), precio_venta:Number(x.precio_venta), recetas:JSON.parse(x.recetas||'[]').map(r=>({...r, id_receta:Number(r.id_receta), cantidad:Number(r.cantidad)}))}));
     tareas = (data.tareas||[]).map(x=>({...x, id:Number(x.id), producto_id:Number(x.producto_id), pedido_id:Number(x.pedido_id), cantidad_producir:Number(x.cantidad_producir)}));
@@ -78,7 +91,15 @@ function cargarDatos(email) {
 }
 
 function setSyncing(act, msg='') { document.getElementById('syncMsg').textContent = msg||(act?'Sincronizando...':'Sincronizado ✓'); }
-const syncInv = async() => { setSyncing(true); await apiCall('saveInventario',{data:inventario}); setSyncing(false); };
+
+// Al guardar el inventario, convertimos el historial en texto para que lo guarde Google Sheets
+const syncInv = async() => { 
+  setSyncing(true); 
+  const invToSave = inventario.map(x => ({...x, fecha_compra: JSON.stringify(x.historial)}));
+  await apiCall('saveInventario',{data: invToSave}); 
+  setSyncing(false); 
+};
+
 const syncRct = async() => { setSyncing(true); await apiCall('saveRecetas',{data:recetas}); setSyncing(false); };
 const syncPro = async() => { setSyncing(true); await apiCall('saveProductos',{data:productos}); setSyncing(false); };
 const syncTar = async() => { setSyncing(true); await apiCall('saveTareas',{data:tareas}); setSyncing(false); };
@@ -110,8 +131,8 @@ function checkAlertas() {
 }
 
 function dismissAlertas() { 
-  const tresHorasMilisegundos = 3 * 60 * 60 * 1000;
-  localStorage.setItem('alertasSnoozeUntil', Date.now() + tresHorasMilisegundos); 
+  const tresHoras = 3 * 60 * 60 * 1000;
+  localStorage.setItem('alertasSnoozeUntil', Date.now() + tresHoras); 
   document.getElementById('alertasGlobales').innerHTML = ''; 
 }
 
@@ -124,21 +145,57 @@ function getConversion(cant, uReceta, uInv) {
   return cant;
 }
 
-// 1. MATERIA PRIMA
+// 1. MATERIA PRIMA (SISTEMA DE AGRUPACIÓN INTELIGENTE)
 function addMateriaPrima() {
-  const n=document.getElementById('invNombre').value, c=document.getElementById('invCategoria').value, u=document.getElementById('invUnidad').value, q=Number(document.getElementById('invCantidad').value), f=document.getElementById('invFechaCompra').value;
-  if(!n) return alert('Falta el nombre del ingrediente.');
+  const n=document.getElementById('invNombre').value.trim();
+  const c=document.getElementById('invCategoria').value;
+  const u=document.getElementById('invUnidad').value;
+  const q=Number(document.getElementById('invCantidad').value);
+  const f=document.getElementById('invFechaCompra').value;
+
+  if(!n || isNaN(q) || q <= 0 || !f) return alert('Ingresa un nombre, una fecha y una cantidad mayor a 0.');
   
+  // Normalizar: Primera mayúscula, lo demás minúscula. Ej: "mAnTeQuIlLa" -> "Mantequilla"
+  const nombreEstandar = n.charAt(0).toUpperCase() + n.slice(1).toLowerCase();
+
   if (invEnEdicion) {
     const mat = inventario.find(x => x.id === invEnEdicion);
-    if(mat) { mat.nombre=n; mat.categoria=c; mat.unidad=u; mat.cantidad=q; mat.fecha_compra=f; }
+    if(mat) { mat.nombre=nombreEstandar; mat.categoria=c; mat.unidad=u; mat.cantidad=q; } // Al editar, solo ajusta base
   } else {
-    inventario.push({id: getNextId(inventario), nombre:n, categoria:c, unidad:u, cantidad:q, fecha_compra:f});
+    // Modo Agregar: Buscar si ya existe la misma materia prima
+    const matExistente = inventario.find(x => x.nombre.toLowerCase() === nombreEstandar.toLowerCase() && x.unidad === u);
+
+    if (matExistente) {
+      matExistente.cantidad += q;
+      matExistente.historial.push({fecha: f, cantidad: q});
+    } else {
+      inventario.push({
+        id: getNextId(inventario), 
+        nombre: nombreEstandar, 
+        categoria: c, 
+        unidad: u, 
+        cantidad: q, 
+        historial: [{fecha: f, cantidad: q}]
+      });
+    }
   }
 
   syncInv(); renderTodo(); 
   document.getElementById('invNombre').value=''; document.getElementById('invCantidad').value=''; 
-  invEnEdicion = null; document.getElementById('btnGuardarInv').textContent = "+ Añadir";
+  invEnEdicion = null; document.getElementById('btnGuardarInv').textContent = "+ Añadir / Sumar";
+}
+
+function verHistorialMateria(id) {
+  const mat = inventario.find(x=>x.id===id);
+  if(!mat) return;
+  document.getElementById('modalHistTitulo').textContent = 'Compras de ' + mat.nombre;
+  const lista = document.getElementById('modalHistLista');
+  if(!mat.historial || mat.historial.length === 0) {
+    lista.innerHTML = '<li>Sin registros.</li>';
+  } else {
+    lista.innerHTML = mat.historial.map(h => `<li>📅 <strong>${h.fecha}:</strong> Se ingresaron ${h.cantidad}${mat.unidad}</li>`).join('');
+  }
+  document.getElementById('modalHistorial').style.display = 'flex';
 }
 
 function editarMateriaPrima(id) {
@@ -148,12 +205,12 @@ function editarMateriaPrima(id) {
   document.getElementById('invCategoria').value = m.categoria;
   document.getElementById('invUnidad').value = m.unidad;
   document.getElementById('invCantidad').value = m.cantidad;
-  document.getElementById('invFechaCompra').value = m.fecha_compra || '';
-  document.getElementById('btnGuardarInv').textContent = "Actualizar Ingrediente";
+  document.getElementById('invFechaCompra').value = new Date().toISOString().split('T')[0];
+  document.getElementById('btnGuardarInv').textContent = "Ajustar (No afecta historial)";
 }
 
 function eliminarMateriaPrima(id) {
-  if(!confirm("¿Eliminar ingrediente?")) return;
+  if(!confirm("¿Eliminar ingrediente por completo?")) return;
   id = Number(id); inventario=inventario.filter(x=>x.id!==id); syncInv(); renderTodo();
 }
 
@@ -164,7 +221,7 @@ function renderInv() {
     <td><strong>${m.nombre}</strong></td>
     <td><span class="badge badge-gray">${m.categoria}</span></td>
     <td style="${m.cantidad<5?'color:var(--rose);font-weight:bold':''}">${m.cantidad.toFixed(2)} ${m.unidad}</td>
-    <td style="font-size:0.85rem; color:#666;">${m.fecha_compra || 'N/A'}</td>
+    <td><button class="btn btn-outline btn-sm" onclick="verHistorialMateria(${m.id})">🛒 Ver Compras</button></td>
     <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarMateriaPrima(${m.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarMateriaPrima(${m.id})">🗑️</button></td>
   </tr>`).join('');
 }
@@ -264,9 +321,6 @@ function updateSelects() {
   document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id==v?'selected':''}>${p.nombre} ($${p.precio_venta})</option>`).join(''); });
 }
 
-// ==========================================
-// REGISTRAR VENTA (PASAN DIRECTO A COCINA SIN BLOQUEO)
-// ==========================================
 function agendarPedido() {
   const c=document.getElementById('ordCliente').value, cel=document.getElementById('ordCelular').value, fE=document.getElementById('ordFechaEnt').value, fP=document.getElementById('ordFechaPed').value, m=document.getElementById('ordMetodo').value, stP=document.getElementById('ordEstadoPago').value, notas=document.getElementById('ordNotas').value;
   const ad=stP==='Adelanto'?Number(document.getElementById('ordAdelanto').value):(stP==='Pagado'?-1:0);
@@ -359,12 +413,7 @@ function renderOrd() {
       <td>${badgePrioridad}<strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
       <td style="font-size:.8rem">${txt}</td>
       <td style="font-size:.8rem">P: ${o.fecha_pedido}<br>E: <strong>${o.fecha_entrega}</strong></td>
-      <td style="font-size:.8rem">
-        Total: $${tot.toFixed(2)}<br>
-        Falta: $${(tot-adReal).toFixed(2)}<br>
-        <span class="badge badge-gray" style="margin-top:4px; display:inline-block;">${o.estado_pago}</span><br>
-        <span style="font-size:0.75rem; color:#666;">💳 ${o.metodo_pago || 'Efectivo'}</span>
-      </td>
+      <td style="font-size:.8rem">Total: $${tot.toFixed(2)}<br>Falta: $${(tot-adReal).toFixed(2)}<br><span class="badge badge-gray" style="margin-top:4px; display:inline-block;">${o.estado_pago}</span><br><span style="font-size:0.75rem; color:#666;">💳 ${o.metodo_pago || 'Efectivo'}</span></td>
       <td>${stSel}</td>
       <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarPedido(${o.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarPedido(${o.id})">🗑️</button></td>
       <td>${avisoStock}</td>
@@ -439,7 +488,6 @@ function renderTar() {
   const resumenContainer = document.getElementById('resumenCocina');
   const pendientes = tareas.filter(t => t.estado === 'Pendiente');
   
-  // AHORA EL RESUMEN AGRUPA SOLO POR RECETAS (Lo que hay que cocinar)
   if(pendientes.length === 0) {
       resumenContainer.innerHTML = '<strong style="color:#9c7a60;">Resumen a preparar:</strong> <span style="color:#888;">No hay preparaciones pendientes.</span>';
   } else {
