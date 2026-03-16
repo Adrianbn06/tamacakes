@@ -14,15 +14,12 @@ const auth = firebase.auth();
 let currentUser = null;
 let inventario=[], recetas=[], productos=[], tareas=[], pedidos=[];
 let recetaEnEdicion = null; 
-let sortByDate = false; // Variable para el filtro de fechas
+let sortByDate = false; 
 
 const ESTADOS = ['Agendado','Realizando','Listo para entrega','Entregado'];
 const ESTADOS_TAR = ['Pendiente','En progreso','Completado'];
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
-// ==========================================
-// VIGILANTE DE SESIÓN FIREBASE
-// ==========================================
 auth.onAuthStateChanged((user) => {
   if (user) {
     document.getElementById('app').style.display = 'none';
@@ -57,7 +54,10 @@ function cargarDatos(email) {
     
     inventario = (data.inventario||[]).map(x=>({...x, cantidad:Number(x.cantidad)}));
     recetas = (data.recetas||[]).map(x=>({...x, rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]')}));
-    productos = (data.productos||[]).map(x=>({...x, precio_venta:Number(x.precio_venta)}));
+    
+    // AHORA LEE LOS COMBOS (JSON DE RECETAS EN EL PRODUCTO)
+    productos = (data.productos||[]).map(x=>({...x, precio_venta:Number(x.precio_venta), recetas:JSON.parse(x.recetas||'[]')}));
+    
     tareas = (data.tareas||[]).map(x=>({...x, cantidad_producir:Number(x.cantidad_producir)}));
     pedidos = (data.pedidos||[]).map(x=>({...x, items:JSON.parse(x.items||'[]'), adelanto:Number(x.adelanto), notas:x.notas||'', celular:x.celular||''}));
 
@@ -110,9 +110,21 @@ function renderInv() {
 }
 
 // 2. RECETAS
+function calCostoRct(id_rct) {
+  const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
+  return r.ingredientes.reduce((t, ing) => { 
+    const m=inventario.find(x=>x.id===ing.id_materia); if(!m) return t;
+    return t + (m.costo * getConversion(ing.cantidad, ing.unidad||m.unidad, m.unidad)); 
+  }, 0);
+}
+function calCostoUnitarioRct(id_rct) {
+  const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
+  return calCostoRct(id_rct) / (r.rendimiento || 1);
+}
+
 function addFilaIngrediente(ingData = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
-  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
+  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (En bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
   document.getElementById('listaIngredientesReceta').appendChild(div);
 }
 function guardarReceta() {
@@ -145,29 +157,56 @@ function renderRct() {
   }).join('');
 }
 
-// 3. PRODUCTOS
-function addProducto() {
-  const n=document.getElementById('proNombre').value, c=document.getElementById('proCategoria').value, r=document.getElementById('proReceta').value, p=Number(document.getElementById('proPrecio').value);
-  if(!n||!r)return;
-  productos.push({id:genId(), nombre:n, categoria:c, id_receta:r, precio_venta:p});
-  syncPro(); renderTodo(); document.getElementById('proNombre').value=''; document.getElementById('proPrecio').value='';
+// 3. PRODUCTOS (MENÚ Y COMBOS)
+function addFilaRecetaProducto() {
+  const div = document.createElement('div'); div.className='fila-ingrediente';
+  div.innerHTML=`<select class="proRecetaId">${recetas.map(r=>`<option value="${r.id}">${r.nombre}</option>`).join('')}</select><input type="number" class="proRecetaCant" min="1" placeholder="Cant." value="1"><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
+  document.getElementById('listaRecetasProducto').appendChild(div);
 }
+
+function addProducto() {
+  const n=document.getElementById('proNombre').value, c=document.getElementById('proCategoria').value, p=Number(document.getElementById('proPrecio').value);
+  const filas = [...document.querySelectorAll('#listaRecetasProducto .fila-ingrediente')];
+  if(!n || !filas.length) return alert('Falta nombre o recetas para el combo.');
+  
+  const rcts = filas.map(f=>({ id_receta: f.querySelector('.proRecetaId').value, cantidad: Number(f.querySelector('.proRecetaCant').value) }));
+  productos.push({id:genId(), nombre:n, categoria:c, recetas:rcts, precio_venta:p});
+  
+  syncPro(); renderTodo(); 
+  document.getElementById('proNombre').value=''; document.getElementById('proPrecio').value=''; document.getElementById('listaRecetasProducto').innerHTML='';
+}
+
 function renderPro() {
   const tb = document.getElementById('tbodyPro');
-  if(!productos.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Menú vacío</td></tr>'; return; }
-  tb.innerHTML = productos.map(p=>`<tr><td><strong>${p.nombre}</strong></td><td><span class="badge badge-gray">${p.categoria}</span></td><td><strong style="color:var(--sage)">$${p.precio_venta.toFixed(2)}</strong></td><td><button class="btn btn-danger btn-icon" onclick="productos=productos.filter(x=>x.id!=='${p.id}');syncPro();renderTodo();">🗑️</button></td></tr>`).join('');
+  if(!productos.length) { tb.innerHTML='<tr><td colspan="5" class="empty">Menú vacío</td></tr>'; return; }
+  
+  tb.innerHTML = productos.map(p=>{
+    let costoCombo = 0;
+    const detalle = p.recetas.map(rItem => {
+      const r = recetas.find(x=>x.id===rItem.id_receta);
+      costoCombo += (calCostoUnitarioRct(rItem.id_receta) * rItem.cantidad);
+      return `${rItem.cantidad}x ${r?r.nombre:'?'}`;
+    }).join('<br>');
+
+    return `<tr>
+      <td><strong>${p.nombre}</strong></td>
+      <td style="font-size:0.8rem; color:#666;">Incluye:<br>${detalle}<br><strong style="color:var(--brown)">Costo: $${costoCombo.toFixed(2)}</strong></td>
+      <td><strong style="color:var(--sage)">$${p.precio_venta.toFixed(2)}</strong></td>
+      <td style="color: ${p.precio_venta - costoCombo < 0 ? 'var(--rose)' : 'var(--sage)'}">+$${(p.precio_venta - costoCombo).toFixed(2)}</td>
+      <td><button class="btn btn-danger btn-icon" onclick="productos=productos.filter(x=>x.id!=='${p.id}');syncPro();renderTodo();">🗑️</button></td>
+    </tr>`;
+  }).join('');
 }
 
 // 4. VENTAS
 function toggleAdelanto() { document.getElementById('divAdelanto').style.display = document.getElementById('ordEstadoPago').value==='Adelanto'?'flex':'none'; }
 function addItemRow() {
   const div=document.createElement('div'); div.className='item-row';
-  div.innerHTML=`<div class="fg"><label>Producto</label><select class="ordProd"></select></div><div class="fg"><label>Cant</label><input type="number" class="ordCant" min="1" placeholder="1"></div><button class="btn btn-outline btn-sm btn-icon" style="align-self:flex-end" onclick="this.parentElement.remove()">✕</button>`;
+  div.innerHTML=`<div class="fg"><label>Producto / Combo</label><select class="ordProd" style="padding:5px; margin-right:5px; border-radius:8px; border:1px solid var(--border);"></select></div><div class="fg"><label>Cant</label><input type="number" class="ordCant" min="1" placeholder="1" style="width:70px; padding:5px; margin-right:5px; border-radius:8px; border:1px solid var(--border);"></div><button class="btn btn-outline btn-sm btn-icon" style="align-self:flex-end" onclick="this.parentElement.remove()">✕</button>`;
   document.getElementById('ordenItems').appendChild(div);
   updateSelects();
 }
 function updateSelects() {
-  const rSel=document.getElementById('proReceta'); if(rSel) rSel.innerHTML=recetas.map(r=>`<option value="${r.id}">${r.nombre}</option>`).join('');
   document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${p.nombre} ($${p.precio_venta})</option>`).join(''); });
 }
 
@@ -209,20 +248,24 @@ function eliminarPedido(id) {
   Promise.all([syncOrd(), syncTar()]).then(renderTodo);
 }
 
+// Revisa matemáticamente el stock de un Combo (sus múltiples recetas)
 function checkStockFaltantePedido(orden) {
   if (orden.estado === 'Entregado' || orden.estado === 'Listo para entrega') return false;
-  let matNecesaria = {};
+  let reqAgregado = {};
   let tareasPendientes = tareas.filter(t => t.pedido_id === orden.id && t.estado !== 'Completado');
+  
   for(const t of tareasPendientes) {
-    const p = productos.find(x=>x.id===t.producto_id); if(!p) continue;
-    const rct = recetas.find(x=>x.id===p.id_receta); if(!rct) continue;
-    rct.ingredientes.forEach(ing => {
-      const mat = inventario.find(x=>x.id===ing.id_materia); if(!mat) return;
-      const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
-      if(!matNecesaria[mat.id]) matNecesaria[mat.id] = 0; matNecesaria[mat.id] += req;
+    const p = productos.find(x=>x.id===t.producto_id); if(!p || !p.recetas) continue;
+    p.recetas.forEach(rItem => {
+      const rct = recetas.find(x=>x.id===rItem.id_receta); if(!rct) return;
+      rct.ingredientes.forEach(ing => {
+        const mat = inventario.find(x=>x.id===ing.id_materia); if(!mat) return;
+        const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir * rItem.cantidad / (rct.rendimiento || 1));
+        reqAgregado[mat.id] = (reqAgregado[mat.id]||0) + req;
+      });
     });
   }
-  for(const id in matNecesaria) { const mat = inventario.find(x=>x.id===id); if(mat && mat.cantidad < matNecesaria[id]) return true; }
+  for(const id in reqAgregado) { const mat = inventario.find(x=>x.id===id); if(mat && mat.cantidad < reqAgregado[id]) return true; }
   return false;
 }
 
@@ -246,7 +289,7 @@ function renderOrd() {
   let list = pedidos.filter(o=>o.cliente.toLowerCase().includes(kw));
   if(!list.length) { tb.innerHTML='<tr><td colspan="7" class="empty">Sin registros</td></tr>'; return; }
 
-  // MAGIA 1: Ordenar y Enviar "Entregado" al final
+  // ORDENAR Y ENVIAR "ENTREGADO" AL FINAL
   list.sort((a, b) => {
      if (a.estado === 'Entregado' && b.estado !== 'Entregado') return 1;
      if (a.estado !== 'Entregado' && b.estado === 'Entregado') return -1;
@@ -262,11 +305,8 @@ function renderOrd() {
     const stSel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="const p=pedidos.find(x=>x.id==='${o.id}');if(p){p.estado=this.value;syncOrd();}">${ESTADOS.map(e=>`<option ${o.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
     const avisoStock = checkStockFaltantePedido(o) ? '<span style="color:var(--rose); font-weight:bold; font-size:0.75rem;">⚠️ Falta Comprar Ingredientes</span>' : '<span style="color:var(--sage); font-size:0.75rem;">✓ Ingredientes Listos</span>';
 
-    // MAGIA 2: Etiqueta de prioridad
     let badgePrioridad = '';
-    if (o.estado !== 'Entregado' && o.fecha_entrega <= hoy) {
-        badgePrioridad = '<span class="badge badge-yellow" style="margin-bottom:6px;">🔥 Prioridad (Entrega)</span><br>';
-    }
+    if (o.estado !== 'Entregado' && o.fecha_entrega <= hoy) badgePrioridad = '<span class="badge badge-yellow" style="margin-bottom:6px;">🔥 Prioridad (Entrega)</span><br>';
 
     return `<tr style="${o.estado === 'Entregado' ? 'opacity: 0.6; background: #f9f9f9;' : ''}">
       <td>${badgePrioridad}<strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
@@ -280,31 +320,40 @@ function renderOrd() {
   }).join('');
 }
 
-// 5. COCINA (AUTOMATIZADA Y VINCULADA)
+// 5. COCINA
 function cambiarEstadoTar(id, st) { 
   const t = tareas.find(x=>x.id===id); if(!t)return; 
   let promises = [];
 
   if(st === 'Completado' && t.estado !== 'Completado') {
     const p = productos.find(x=>x.id===t.producto_id);
-    const rct = recetas.find(x=>x.id===p?.id_receta);
-    if(!rct) return alert('Error: Producto sin receta.');
+    if(!p || !p.recetas) return alert('Error: Producto sin recetas vinculadas.');
 
-    let falta = false; let msgFalta = [];
-    rct.ingredientes.forEach(ing => {
-      const mat = inventario.find(x=>x.id===ing.id_materia);
-      if(!mat) {falta = true; return;}
-      const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
-      if(mat.cantidad < req) { falta = true; msgFalta.push(mat.nombre); }
+    // 1. Agregar todos los ingredientes necesarios para este Combo
+    let reqAgregado = {};
+    p.recetas.forEach(rItem => {
+      const rct = recetas.find(x=>x.id===rItem.id_receta); if(!rct) return;
+      rct.ingredientes.forEach(ing => {
+        const mat = inventario.find(x=>x.id===ing.id_materia); if(!mat) return;
+        const amt = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir * rItem.cantidad / (rct.rendimiento || 1));
+        reqAgregado[mat.id] = (reqAgregado[mat.id]||0) + amt;
+      });
     });
+
+    // 2. Comprobar si hay stock de la suma total
+    let falta = false; let msgFalta = [];
+    for(const mId in reqAgregado) {
+       const mat = inventario.find(x=>x.id===mId);
+       if(mat && mat.cantidad < reqAgregado[mId]) { falta=true; msgFalta.push(mat.nombre); }
+    }
 
     if(falta) { renderTar(); return alert('❌ IMPOSIBLE COCINAR: Faltan ingredientes en bodega:\n' + msgFalta.join(', ')); }
 
-    rct.ingredientes.forEach(ing => {
-      const mat = inventario.find(x=>x.id===ing.id_materia);
-      const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
-      mat.cantidad -= req;
-    });
+    // 3. Descontar la suma total real
+    for(const mId in reqAgregado) {
+       const mat = inventario.find(x=>x.id===mId);
+       mat.cantidad -= reqAgregado[mId];
+    }
 
     t.estado = 'Completado';
     promises.push(syncInv());
@@ -313,7 +362,7 @@ function cambiarEstadoTar(id, st) {
     t.estado = st; 
   }
 
-  // MAGIA 3: SI LA COCINA PONE "EN PROGRESO", LA VENTA PASA A "REALIZANDO"
+  // AUTOMATIZACIÓN 1: PASA A "REALIZANDO"
   if (st === 'En progreso' && t.pedido_id) {
     const ord = pedidos.find(o => o.id === t.pedido_id);
     if (ord && ord.estado !== 'Realizando' && ord.estado !== 'Entregado') {
@@ -322,7 +371,7 @@ function cambiarEstadoTar(id, st) {
     }
   }
   
-  // MAGIA 4: SI LA COCINA PONE "COMPLETADO", COMPROBAMOS SI TODO EL PEDIDO ESTÁ LISTO
+  // AUTOMATIZACIÓN 2: PASA A "LISTO PARA ENTREGA" SI LA COCINA TERMINA TODO EL PEDIDO
   if (st === 'Completado' && t.pedido_id) {
     const parentOrder = pedidos.find(o => o.id === t.pedido_id);
     if (parentOrder && parentOrder.estado !== 'Entregado' && parentOrder.estado !== 'Listo para entrega') {
@@ -340,7 +389,6 @@ function cambiarEstadoTar(id, st) {
 }
 
 function renderTar() {
-  // MAGIA 5: RESUMEN DE COCINA
   const resumenContainer = document.getElementById('resumenCocina');
   const pendientes = tareas.filter(t => t.estado === 'Pendiente');
   
@@ -359,26 +407,39 @@ function renderTar() {
       resumenContainer.innerHTML = '<strong style="display:block; margin-bottom:10px; color:var(--brown);">Resumen Total de Producción (Pendientes):</strong>' + htmlItems.join('');
   }
 
-  // TABLA DE TAREAS NORMAL
   const tb = document.getElementById('tbodyTar');
   if(!tareas.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Cocina libre de tareas</td></tr>'; return; }
-  const sorted = [...tareas].sort((a,b)=>new Date(a.fecha_limite) - new Date(b.fecha_limite));
+  
+  // ORDENAR TAREAS: COMPLETADOS AL FINAL, LUEGO POR FECHA
+  const sorted = [...tareas].sort((a,b)=> {
+      if(a.estado === 'Completado' && b.estado !== 'Completado') return 1;
+      if(a.estado !== 'Completado' && b.estado === 'Completado') return -1;
+      return new Date(a.fecha_limite) - new Date(b.fecha_limite);
+  });
   
   tb.innerHTML = sorted.map(t=>{
     const p=productos.find(x=>x.id===t.producto_id);
-    const rct=recetas.find(x=>x.id===p?.id_receta);
     
     let alertasHtml = '';
     if (t.estado !== 'Completado') {
-      if(!rct) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Producto sin receta</span>'; } 
+      if(!p || !p.recetas) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Combo vacío o roto</span>'; } 
       else {
-        let faltantes = [];
-        rct.ingredientes.forEach(ing => {
-          const mat = inventario.find(x=>x.id===ing.id_materia);
-          if(!mat) return;
-          const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
-          if (mat.cantidad < req) { faltantes.push(`${mat.nombre} (Falta ${(req - mat.cantidad).toFixed(2)}${mat.unidad})`); }
+        let reqAgregado = {};
+        p.recetas.forEach(rItem => {
+          const rct = recetas.find(x=>x.id===rItem.id_receta); if(!rct) return;
+          rct.ingredientes.forEach(ing => {
+            const mat = inventario.find(x=>x.id===ing.id_materia); if(!mat) return;
+            const amt = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir * rItem.cantidad / (rct.rendimiento || 1));
+            reqAgregado[mat.id] = (reqAgregado[mat.id]||0) + amt;
+          });
         });
+
+        let faltantes = [];
+        for(const mId in reqAgregado) {
+           const mat = inventario.find(x=>x.id===mId);
+           if(mat && mat.cantidad < reqAgregado[mId]) faltantes.push(`${mat.nombre} (Falta ${(reqAgregado[mId] - mat.cantidad).toFixed(2)}${mat.unidad})`);
+        }
+
         if (faltantes.length > 0) {
           alertasHtml = `<br><div style="background:#ffebeb; color:var(--rose); padding:6px; border-radius:6px; font-size:.75rem; margin-top:5px;"><strong>Falta comprar:</strong><br>- ${faltantes.join('<br>- ')}</div>`;
         } else {
@@ -391,9 +452,12 @@ function renderTar() {
 
     const sel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="cambiarEstadoTar('${t.id}',this.value)" ${t.estado==='Completado'?'disabled':''}>${ESTADOS_TAR.map(e=>`<option ${t.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
     
-    return `<tr>
+    const detalleCombo = p && p.recetas ? '<div style="font-size:0.8rem; color:#666; margin-top:4px;">Incluye: ' + p.recetas.map(rItem => { const r = recetas.find(x=>x.id===rItem.id_receta); return `${rItem.cantidad * t.cantidad_producir}x ${r?r.nombre:'?'}`; }).join(', ') + '</div>' : '';
+
+    return `<tr style="${t.estado === 'Completado' ? 'opacity: 0.5; background: #f9f9f9;' : ''}">
       <td style="vertical-align:top; width: 35%;">
         <strong style="font-size: 1.4rem; color: var(--rose); margin-right: 5px;">${t.cantidad_producir}x</strong><strong style="font-size: 1.1rem;">${p?p.nombre:'?'}</strong>
+        ${detalleCombo}
         ${alertasHtml}
       </td>
       <td style="vertical-align:top;">${t.fecha_limite}</td>
