@@ -14,7 +14,6 @@ const auth = firebase.auth();
 let currentUser = null;
 let inventario=[], recetas=[], productos=[], tareas=[], pedidos=[];
 
-// Variables de estado de edición
 let invEnEdicion = null;
 let recetaEnEdicion = null; 
 let proEnEdicion = null;
@@ -23,9 +22,6 @@ let sortByDate = false;
 const ESTADOS = ['Agendado','Realizando','Listo para entrega','Entregado'];
 const ESTADOS_TAR = ['Pendiente','En progreso','Completado'];
 
-// ==========================================
-// NUEVO SISTEMA DE ID: AUTO-INCREMENTABLE
-// ==========================================
 function getNextId(arr) {
   if (!arr || arr.length === 0) return 1;
   return Math.max(...arr.map(item => Number(item.id) || 0)) + 1;
@@ -63,7 +59,6 @@ function cargarDatos(email) {
     if (data.error) { auth.signOut(); return; }
     currentUser = { email, rol: data.rol };
     
-    // Parseamos todo a Número para que el Auto-Increment funcione perfecto
     inventario = (data.inventario||[]).map(x=>({...x, id:Number(x.id), cantidad:Number(x.cantidad), fecha_compra:x.fecha_compra||''}));
     recetas = (data.recetas||[]).map(x=>({...x, id:Number(x.id), rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]').map(i=>({...i, id_materia:Number(i.id_materia), cantidad:Number(i.cantidad)}))}));
     productos = (data.productos||[]).map(x=>({...x, id:Number(x.id), precio_venta:Number(x.precio_venta), recetas:JSON.parse(x.recetas||'[]').map(r=>({...r, id_receta:Number(r.id_receta), cantidad:Number(r.cantidad)}))}));
@@ -91,9 +86,7 @@ const syncOrd = async() => { setSyncing(true); await apiCall('savePedidos',{data
 
 function renderTodo() { renderInv(); renderRct(); renderPro(); renderTar(); renderOrd(); updateSelects(); checkAlertas(); }
 
-// ==========================================
-// ALERTAS (Silenciables por 3 horas)
-// ==========================================
+// ALERTAS
 function checkAlertas() {
   const snoozeUntil = localStorage.getItem('alertasSnoozeUntil');
   if (snoozeUntil && Date.now() < Number(snoozeUntil)) {
@@ -215,12 +208,6 @@ function renderRct() {
 }
 
 // 3. PRODUCTOS / MENÚ
-function calCostoRct(id_rct) {
-  const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
-  return r.ingredientes.reduce((t, ing) => { const m=inventario.find(x=>x.id===ing.id_materia); if(!m) return t; return t + (m.costo * getConversion(ing.cantidad, ing.unidad||m.unidad, m.unidad)); }, 0);
-}
-function calCostoUnitarioRct(id_rct) { const r = recetas.find(x=>x.id===id_rct); if(!r) return 0; return calCostoRct(id_rct) / (r.rendimiento || 1); }
-
 function addFilaRecetaProducto(rItem = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
   div.innerHTML=`<select class="proRecetaId">${recetas.map(r=>`<option value="${r.id}" ${rItem&&rItem.id_receta===r.id?'selected':''}>${r.nombre}</option>`).join('')}</select><input type="number" class="proRecetaCant" min="1" placeholder="Cant." value="${rItem?rItem.cantidad:1}"><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
@@ -229,7 +216,7 @@ function addFilaRecetaProducto(rItem = null) {
 function addProducto() {
   const n=document.getElementById('proNombre').value, c=document.getElementById('proCategoria').value, p=Number(document.getElementById('proPrecio').value);
   const filas = [...document.querySelectorAll('#listaRecetasProducto .fila-ingrediente')];
-  if(!n || !filas.length) return alert('Falta nombre o recetas para el combo.');
+  if(!n || !filas.length) return alert('Falta nombre o recetas para el producto.');
   
   const rcts = filas.map(f=>({ id_receta: Number(f.querySelector('.proRecetaId').value), cantidad: Number(f.querySelector('.proRecetaCant').value) }));
   
@@ -264,7 +251,7 @@ function renderPro() {
   }).join('');
 }
 
-// 4. VENTAS
+// 4. VENTAS (PASAN DIRECTO SIN BLOQUEO DE STOCK)
 function toggleAdelanto() { document.getElementById('divAdelanto').style.display = document.getElementById('ordEstadoPago').value==='Adelanto'?'flex':'none'; }
 function addItemRow() {
   const div=document.createElement('div'); div.className='item-row';
@@ -442,19 +429,25 @@ function renderTar() {
   const resumenContainer = document.getElementById('resumenCocina');
   const pendientes = tareas.filter(t => t.estado === 'Pendiente');
   
+  // AHORA EL RESUMEN AGRUPA POR RECETA INDIVIDUAL, NO POR COMBO
   if(pendientes.length === 0) {
-      resumenContainer.innerHTML = '<strong style="color:#9c7a60;">Resumen a preparar:</strong> <span style="color:#888;">No hay pasteles pendientes.</span>';
+      resumenContainer.innerHTML = '<strong style="color:#9c7a60;">Resumen a preparar:</strong> <span style="color:#888;">No hay preparaciones pendientes.</span>';
   } else {
-      const totales = {};
+      const totalesRecetas = {};
       pendientes.forEach(t => {
-          if(!totales[t.producto_id]) totales[t.producto_id] = 0;
-          totales[t.producto_id] += t.cantidad_producir;
+          const p = productos.find(x => x.id === t.producto_id);
+          if(p && p.recetas) {
+              p.recetas.forEach(rItem => {
+                  if(!totalesRecetas[rItem.id_receta]) totalesRecetas[rItem.id_receta] = 0;
+                  totalesRecetas[rItem.id_receta] += (rItem.cantidad * t.cantidad_producir);
+              });
+          }
       });
-      const htmlItems = Object.keys(totales).map(pId => {
-          const p = productos.find(x => x.id === Number(pId));
-          return `<div style="display:inline-block; background:white; border:1px solid var(--caramel); padding:6px 12px; border-radius:8px; margin:4px 8px 4px 0;"><strong style="color:var(--rose); font-size:1.1rem;">${totales[pId]}x</strong> ${p ? p.nombre : '?'}</div>`;
+      const htmlItems = Object.keys(totalesRecetas).map(rId => {
+          const rct = recetas.find(x => x.id === Number(rId));
+          return `<div style="display:inline-block; background:white; border:1px solid var(--caramel); padding:6px 12px; border-radius:8px; margin:4px 8px 4px 0;"><strong style="color:var(--rose); font-size:1.1rem;">${totalesRecetas[rId]}x</strong> ${rct ? rct.nombre : '?'}</div>`;
       });
-      resumenContainer.innerHTML = '<strong style="display:block; margin-bottom:10px; color:var(--brown);">Resumen Total de Producción (Pendientes):</strong>' + htmlItems.join('');
+      resumenContainer.innerHTML = '<strong style="display:block; margin-bottom:10px; color:var(--brown);">Resumen Total de Producción (Recetas individuales a preparar):</strong>' + htmlItems.join('');
   }
 
   const tb = document.getElementById('tbodyTar');
@@ -471,7 +464,7 @@ function renderTar() {
     
     let alertasHtml = '';
     if (t.estado !== 'Completado') {
-      if(!p || !p.recetas) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Combo vacío o roto</span>'; } 
+      if(!p || !p.recetas) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Producto roto</span>'; } 
       else {
         let reqAgregado = {};
         p.recetas.forEach(rItem => {
