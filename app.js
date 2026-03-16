@@ -251,7 +251,7 @@ function renderPro() {
   }).join('');
 }
 
-// 4. VENTAS (PASAN DIRECTO SIN BLOQUEO DE STOCK)
+// 4. VENTAS
 function toggleAdelanto() { document.getElementById('divAdelanto').style.display = document.getElementById('ordEstadoPago').value==='Adelanto'?'flex':'none'; }
 function addItemRow() {
   const div=document.createElement('div'); div.className='item-row';
@@ -260,9 +260,13 @@ function addItemRow() {
   updateSelects();
 }
 function updateSelects() {
+  const rSel=document.getElementById('proReceta'); if(rSel) rSel.innerHTML=recetas.map(r=>`<option value="${r.id}">${r.nombre}</option>`).join('');
   document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id==v?'selected':''}>${p.nombre} ($${p.precio_venta})</option>`).join(''); });
 }
 
+// ==========================================
+// REGISTRAR VENTA (PASAN DIRECTO A COCINA SIN BLOQUEO)
+// ==========================================
 function agendarPedido() {
   const c=document.getElementById('ordCliente').value, cel=document.getElementById('ordCelular').value, fE=document.getElementById('ordFechaEnt').value, fP=document.getElementById('ordFechaPed').value, m=document.getElementById('ordMetodo').value, stP=document.getElementById('ordEstadoPago').value, notas=document.getElementById('ordNotas').value;
   const ad=stP==='Adelanto'?Number(document.getElementById('ordAdelanto').value):(stP==='Pagado'?-1:0);
@@ -348,13 +352,19 @@ function renderOrd() {
     const adReal = o.estado_pago==='Pagado'?tot:o.adelanto;
     const stSel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="const p=pedidos.find(x=>x.id===${o.id});if(p){p.estado=this.value;syncOrd();}">${ESTADOS.map(e=>`<option ${o.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
     const avisoStock = checkStockFaltantePedido(o) ? '<span style="color:var(--rose); font-weight:bold; font-size:0.75rem;">⚠️ Falta Comprar Ingredientes</span>' : '<span style="color:var(--sage); font-size:0.75rem;">✓ Ingredientes Listos</span>';
+    
     let badgePrioridad = ''; if (o.estado !== 'Entregado' && o.fecha_entrega <= hoy) badgePrioridad = '<span class="badge badge-yellow" style="margin-bottom:6px;">🔥 Prioridad (Entrega)</span><br>';
 
     return `<tr style="${o.estado === 'Entregado' ? 'opacity: 0.6; background: #f9f9f9;' : ''}">
       <td>${badgePrioridad}<strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
       <td style="font-size:.8rem">${txt}</td>
       <td style="font-size:.8rem">P: ${o.fecha_pedido}<br>E: <strong>${o.fecha_entrega}</strong></td>
-      <td style="font-size:.8rem">Total: $${tot.toFixed(2)}<br>Falta: $${(tot-adReal).toFixed(2)}</td>
+      <td style="font-size:.8rem">
+        Total: $${tot.toFixed(2)}<br>
+        Falta: $${(tot-adReal).toFixed(2)}<br>
+        <span class="badge badge-gray" style="margin-top:4px; display:inline-block;">${o.estado_pago}</span><br>
+        <span style="font-size:0.75rem; color:#666;">💳 ${o.metodo_pago || 'Efectivo'}</span>
+      </td>
       <td>${stSel}</td>
       <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarPedido(${o.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarPedido(${o.id})">🗑️</button></td>
       <td>${avisoStock}</td>
@@ -429,7 +439,7 @@ function renderTar() {
   const resumenContainer = document.getElementById('resumenCocina');
   const pendientes = tareas.filter(t => t.estado === 'Pendiente');
   
-  // AHORA EL RESUMEN AGRUPA POR RECETA INDIVIDUAL, NO POR COMBO
+  // AHORA EL RESUMEN AGRUPA SOLO POR RECETAS (Lo que hay que cocinar)
   if(pendientes.length === 0) {
       resumenContainer.innerHTML = '<strong style="color:#9c7a60;">Resumen a preparar:</strong> <span style="color:#888;">No hay preparaciones pendientes.</span>';
   } else {
@@ -464,7 +474,7 @@ function renderTar() {
     
     let alertasHtml = '';
     if (t.estado !== 'Completado') {
-      if(!p || !p.recetas) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Producto roto</span>'; } 
+      if(!p || !p.recetas) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Combo vacío o roto</span>'; } 
       else {
         let reqAgregado = {};
         p.recetas.forEach(rItem => {
