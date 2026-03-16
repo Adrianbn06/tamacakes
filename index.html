@@ -135,6 +135,7 @@
         <div class="card-title">1. Datos del Cliente y Pago</div>
         <div class="form-grid">
           <div class="fg"><label>Cliente</label><input type="text" id="ordCliente"></div>
+          <div class="fg"><label>Celular (Opcional)</label><input type="text" id="ordCelular" placeholder="Ej: 0991234567"></div>
           <div class="fg"><label>Fecha Entrega</label><input type="date" id="ordFechaEnt"></div>
           <div class="fg"><label>Notas Especiales</label><input type="text" id="ordNotas" placeholder="Ej: Sin nueces, para regalo..."></div>
           <div class="fg"><label>Estado Pago</label><select id="ordEstadoPago" onchange="toggleAdelanto()"><option>Por pagar</option><option value="Adelanto">Adelanto</option><option>Pagado</option></select></div>
@@ -145,7 +146,6 @@
       
       <div class="card" style="border-top: 4px solid var(--caramel);">
         <div class="card-title">2. Añada los productos</div>
-        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">Agrega los pasteles a vender. La cocina te avisará si falta materia prima para prepararlos.</p>
         <div id="ordenItems"></div>
         <div style="display:flex; gap:.6rem; margin-top:1rem;">
           <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir producto a la lista</button>
@@ -155,7 +155,7 @@
 
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Cliente / Notas</th><th>Productos</th><th>Fechas</th><th>Finanzas</th><th>Estado</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Cliente / Notas</th><th>Productos</th><th>Fechas</th><th>Finanzas</th><th>Estado</th><th>Acciones</th><th>Avisos de Cocina</th></tr></thead>
           <tbody id="tbodyOrd"></tbody>
         </table>
       </div>
