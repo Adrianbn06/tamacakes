@@ -65,7 +65,7 @@ td{padding:.7rem 1rem;color:var(--brown);vertical-align:middle;}
 .btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--brown);} 
 .btn-sm{padding:.35rem .8rem;font-size:.78rem;} .btn-icon{padding:.4rem .6rem;}
 
-/* NUEVOS ESTILOS (Alertas y Recetas) */
+/* ALERTAS Y RECETAS */
 .alert-box { background: #ffebeb; border-left: 4px solid var(--rose); padding: 12px; border-radius: 8px; color: var(--rose); margin-bottom: 1.5rem; font-weight: 500;}
 .fila-ingrediente { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap;}
 .fila-ingrediente select, .fila-ingrediente input { font-family:var(--font-b); padding: 8px; border:1px solid var(--border); border-radius:8px; outline:none;}
