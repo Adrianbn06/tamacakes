@@ -54,10 +54,7 @@ function cargarDatos(email) {
     
     inventario = (data.inventario||[]).map(x=>({...x, cantidad:Number(x.cantidad)}));
     recetas = (data.recetas||[]).map(x=>({...x, rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]')}));
-    
-    // AHORA LEE LOS COMBOS (JSON DE RECETAS EN EL PRODUCTO)
     productos = (data.productos||[]).map(x=>({...x, precio_venta:Number(x.precio_venta), recetas:JSON.parse(x.recetas||'[]')}));
-    
     tareas = (data.tareas||[]).map(x=>({...x, cantidad_producir:Number(x.cantidad_producir)}));
     pedidos = (data.pedidos||[]).map(x=>({...x, items:JSON.parse(x.items||'[]'), adelanto:Number(x.adelanto), notas:x.notas||'', celular:x.celular||''}));
 
@@ -81,10 +78,40 @@ const syncOrd = async() => { setSyncing(true); await apiCall('savePedidos',{data
 
 function renderTodo() { renderInv(); renderRct(); renderPro(); renderTar(); renderOrd(); updateSelects(); checkAlertas(); }
 
+// ==========================================
+// NUEVO MOTOR DE ALERTAS CON BOTÓN DE CIERRE
+// ==========================================
 function checkAlertas() {
+  // Comprobar si las alertas están silenciadas (Snooze)
+  const snoozeUntil = localStorage.getItem('alertasSnoozeUntil');
+  if (snoozeUntil && Date.now() < Number(snoozeUntil)) {
+    document.getElementById('alertasGlobales').innerHTML = '';
+    return;
+  }
+
   const alertas = [];
-  inventario.forEach(m => { if(m.cantidad < 5) alertas.push(`Materia prima baja: ${m.nombre} (${m.cantidad.toFixed(2)} ${m.unidad})`); });
-  document.getElementById('alertasGlobales').innerHTML = alertas.length ? `<div class="alert-box"><strong>⚠️ Alertas de Bodega:</strong><br>${alertas.join('<br>')}</div>` : '';
+  inventario.forEach(m => { 
+    if(m.cantidad < 5) alertas.push(`Materia prima baja: ${m.nombre} (${m.cantidad.toFixed(2)} ${m.unidad})`); 
+  });
+  
+  if (alertas.length > 0) {
+    document.getElementById('alertasGlobales').innerHTML = `
+      <div class="alert-box">
+        <button class="alert-close" onclick="dismissAlertas()" title="Ocultar por 3 horas">✕</button>
+        <strong style="color: #b33959;">⚠️ Alertas de Bodega:</strong><br>
+        ${alertas.join('<br>')}
+      </div>
+    `;
+  } else {
+    document.getElementById('alertasGlobales').innerHTML = '';
+  }
+}
+
+// Función para silenciar por 3 horas
+function dismissAlertas() {
+  const tresHorasEnMilisegundos = 3 * 60 * 60 * 1000; 
+  localStorage.setItem('alertasSnoozeUntil', Date.now() + tresHorasEnMilisegundos);
+  document.getElementById('alertasGlobales').innerHTML = '';
 }
 
 function getConversion(cant, uReceta, uInv) {
@@ -124,7 +151,7 @@ function calCostoUnitarioRct(id_rct) {
 
 function addFilaIngrediente(ingData = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
-  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (En bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
+  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
   document.getElementById('listaIngredientesReceta').appendChild(div);
 }
 function guardarReceta() {
@@ -167,7 +194,7 @@ function addFilaRecetaProducto() {
 function addProducto() {
   const n=document.getElementById('proNombre').value, c=document.getElementById('proCategoria').value, p=Number(document.getElementById('proPrecio').value);
   const filas = [...document.querySelectorAll('#listaRecetasProducto .fila-ingrediente')];
-  if(!n || !filas.length) return alert('Falta nombre o recetas para el combo.');
+  if(!n || !filas.length) return alert('Falta nombre o recetas para el producto/combo.');
   
   const rcts = filas.map(f=>({ id_receta: f.querySelector('.proRecetaId').value, cantidad: Number(f.querySelector('.proRecetaCant').value) }));
   productos.push({id:genId(), nombre:n, categoria:c, recetas:rcts, precio_venta:p});
@@ -190,9 +217,8 @@ function renderPro() {
 
     return `<tr>
       <td><strong>${p.nombre}</strong></td>
-      <td style="font-size:0.8rem; color:#666;">Incluye:<br>${detalle}<br><strong style="color:var(--brown)">Costo: $${costoCombo.toFixed(2)}</strong></td>
+      <td style="font-size:0.8rem; color:#666;">Incluye:<br>${detalle}</td>
       <td><strong style="color:var(--sage)">$${p.precio_venta.toFixed(2)}</strong></td>
-      <td style="color: ${p.precio_venta - costoCombo < 0 ? 'var(--rose)' : 'var(--sage)'}">+$${(p.precio_venta - costoCombo).toFixed(2)}</td>
       <td><button class="btn btn-danger btn-icon" onclick="productos=productos.filter(x=>x.id!=='${p.id}');syncPro();renderTodo();">🗑️</button></td>
     </tr>`;
   }).join('');
@@ -248,7 +274,6 @@ function eliminarPedido(id) {
   Promise.all([syncOrd(), syncTar()]).then(renderTodo);
 }
 
-// Revisa matemáticamente el stock de un Combo (sus múltiples recetas)
 function checkStockFaltantePedido(orden) {
   if (orden.estado === 'Entregado' || orden.estado === 'Listo para entrega') return false;
   let reqAgregado = {};
@@ -269,7 +294,6 @@ function checkStockFaltantePedido(orden) {
   return false;
 }
 
-// BOTÓN DE ORDENAR POR FECHA
 function toggleSortPedidos() {
   sortByDate = !sortByDate;
   const btn = document.getElementById('btnSortOrd');
@@ -289,7 +313,6 @@ function renderOrd() {
   let list = pedidos.filter(o=>o.cliente.toLowerCase().includes(kw));
   if(!list.length) { tb.innerHTML='<tr><td colspan="7" class="empty">Sin registros</td></tr>'; return; }
 
-  // ORDENAR Y ENVIAR "ENTREGADO" AL FINAL
   list.sort((a, b) => {
      if (a.estado === 'Entregado' && b.estado !== 'Entregado') return 1;
      if (a.estado !== 'Entregado' && b.estado === 'Entregado') return -1;
@@ -329,7 +352,6 @@ function cambiarEstadoTar(id, st) {
     const p = productos.find(x=>x.id===t.producto_id);
     if(!p || !p.recetas) return alert('Error: Producto sin recetas vinculadas.');
 
-    // 1. Agregar todos los ingredientes necesarios para este Combo
     let reqAgregado = {};
     p.recetas.forEach(rItem => {
       const rct = recetas.find(x=>x.id===rItem.id_receta); if(!rct) return;
@@ -340,7 +362,6 @@ function cambiarEstadoTar(id, st) {
       });
     });
 
-    // 2. Comprobar si hay stock de la suma total
     let falta = false; let msgFalta = [];
     for(const mId in reqAgregado) {
        const mat = inventario.find(x=>x.id===mId);
@@ -349,7 +370,6 @@ function cambiarEstadoTar(id, st) {
 
     if(falta) { renderTar(); return alert('❌ IMPOSIBLE COCINAR: Faltan ingredientes en bodega:\n' + msgFalta.join(', ')); }
 
-    // 3. Descontar la suma total real
     for(const mId in reqAgregado) {
        const mat = inventario.find(x=>x.id===mId);
        mat.cantidad -= reqAgregado[mId];
@@ -362,7 +382,6 @@ function cambiarEstadoTar(id, st) {
     t.estado = st; 
   }
 
-  // AUTOMATIZACIÓN 1: PASA A "REALIZANDO"
   if (st === 'En progreso' && t.pedido_id) {
     const ord = pedidos.find(o => o.id === t.pedido_id);
     if (ord && ord.estado !== 'Realizando' && ord.estado !== 'Entregado') {
@@ -371,7 +390,6 @@ function cambiarEstadoTar(id, st) {
     }
   }
   
-  // AUTOMATIZACIÓN 2: PASA A "LISTO PARA ENTREGA" SI LA COCINA TERMINA TODO EL PEDIDO
   if (st === 'Completado' && t.pedido_id) {
     const parentOrder = pedidos.find(o => o.id === t.pedido_id);
     if (parentOrder && parentOrder.estado !== 'Entregado' && parentOrder.estado !== 'Listo para entrega') {
@@ -410,7 +428,6 @@ function renderTar() {
   const tb = document.getElementById('tbodyTar');
   if(!tareas.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Cocina libre de tareas</td></tr>'; return; }
   
-  // ORDENAR TAREAS: COMPLETADOS AL FINAL, LUEGO POR FECHA
   const sorted = [...tareas].sort((a,b)=> {
       if(a.estado === 'Completado' && b.estado !== 'Completado') return 1;
       if(a.estado !== 'Completado' && b.estado === 'Completado') return -1;
