@@ -54,7 +54,6 @@ async function apiCall(action, payload={}) {
   return await res.json();
 }
 
-// Lector seguro del Historial
 function parseHistorial(str, cant) {
   if(!str) return [];
   try {
@@ -62,7 +61,7 @@ function parseHistorial(str, cant) {
     if(Array.isArray(parsed)) return parsed;
     return [{fecha: str, cantidad: cant}]; 
   } catch(e) {
-    return [{fecha: str, cantidad: cant}]; // Si no es un array, asume que era un string de fecha antiguo
+    return [{fecha: str, cantidad: cant}]; 
   }
 }
 
@@ -71,7 +70,6 @@ function cargarDatos(email) {
     if (data.error) { auth.signOut(); return; }
     currentUser = { email, rol: data.rol };
     
-    // AHORA INVENTARIO PROCESA EL HISTORIAL OCULTO EN fecha_compra
     inventario = (data.inventario||[]).map(x=>({...x, id:Number(x.id), cantidad:Number(x.cantidad), historial: parseHistorial(x.fecha_compra, x.cantidad)}));
     recetas = (data.recetas||[]).map(x=>({...x, id:Number(x.id), rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]').map(i=>({...i, id_materia:Number(i.id_materia), cantidad:Number(i.cantidad)}))}));
     productos = (data.productos||[]).map(x=>({...x, id:Number(x.id), precio_venta:Number(x.precio_venta), recetas:JSON.parse(x.recetas||'[]').map(r=>({...r, id_receta:Number(r.id_receta), cantidad:Number(r.cantidad)}))}));
@@ -92,14 +90,12 @@ function cargarDatos(email) {
 
 function setSyncing(act, msg='') { document.getElementById('syncMsg').textContent = msg||(act?'Sincronizando...':'Sincronizado ✓'); }
 
-// Al guardar el inventario, convertimos el historial en texto para que lo guarde Google Sheets
 const syncInv = async() => { 
   setSyncing(true); 
   const invToSave = inventario.map(x => ({...x, fecha_compra: JSON.stringify(x.historial)}));
   await apiCall('saveInventario',{data: invToSave}); 
   setSyncing(false); 
 };
-
 const syncRct = async() => { setSyncing(true); await apiCall('saveRecetas',{data:recetas}); setSyncing(false); };
 const syncPro = async() => { setSyncing(true); await apiCall('saveProductos',{data:productos}); setSyncing(false); };
 const syncTar = async() => { setSyncing(true); await apiCall('saveTareas',{data:tareas}); setSyncing(false); };
@@ -107,7 +103,9 @@ const syncOrd = async() => { setSyncing(true); await apiCall('savePedidos',{data
 
 function renderTodo() { renderInv(); renderRct(); renderPro(); renderTar(); renderOrd(); updateSelects(); checkAlertas(); }
 
-// ALERTAS
+// ==========================================
+// ALERTAS 
+// ==========================================
 function checkAlertas() {
   const snoozeUntil = localStorage.getItem('alertasSnoozeUntil');
   if (snoozeUntil && Date.now() < Number(snoozeUntil)) {
@@ -131,21 +129,23 @@ function checkAlertas() {
 }
 
 function dismissAlertas() { 
-  const tresHoras = 3 * 60 * 60 * 1000;
-  localStorage.setItem('alertasSnoozeUntil', Date.now() + tresHoras); 
+  const tresHorasMilisegundos = 3 * 60 * 60 * 1000;
+  localStorage.setItem('alertasSnoozeUntil', Date.now() + tresHorasMilisegundos); 
   document.getElementById('alertasGlobales').innerHTML = ''; 
 }
 
-function getConversion(cant, uReceta, uInv) {
-  if(!uReceta || uReceta === uInv) return cant;
-  if(uReceta==='g' && uInv==='kg') return cant/1000;
-  if(uReceta==='kg' && uInv==='g') return cant*1000;
-  if(uReceta==='ml' && uInv==='L') return cant/1000;
-  if(uReceta==='L' && uInv==='ml') return cant*1000;
+function getConversion(cant, uOrigen, uDestino) {
+  if(!uOrigen || uOrigen === uDestino) return cant;
+  if(uOrigen==='g' && uDestino==='kg') return cant/1000;
+  if(uOrigen==='kg' && uDestino==='g') return cant*1000;
+  if(uOrigen==='ml' && uDestino==='L') return cant/1000;
+  if(uOrigen==='L' && uDestino==='ml') return cant*1000;
   return cant;
 }
 
-// 1. MATERIA PRIMA (SISTEMA DE AGRUPACIÓN INTELIGENTE)
+// ==========================================
+// 1. MATERIA PRIMA (AGRUPACIÓN INTELIGENTE)
+// ==========================================
 function addMateriaPrima() {
   const n=document.getElementById('invNombre').value.trim();
   const c=document.getElementById('invCategoria').value;
@@ -155,19 +155,22 @@ function addMateriaPrima() {
 
   if(!n || isNaN(q) || q <= 0 || !f) return alert('Ingresa un nombre, una fecha y una cantidad mayor a 0.');
   
-  // Normalizar: Primera mayúscula, lo demás minúscula. Ej: "mAnTeQuIlLa" -> "Mantequilla"
+  // Normalizar: Primera letra mayúscula, el resto minúsculas
   const nombreEstandar = n.charAt(0).toUpperCase() + n.slice(1).toLowerCase();
 
   if (invEnEdicion) {
     const mat = inventario.find(x => x.id === invEnEdicion);
-    if(mat) { mat.nombre=nombreEstandar; mat.categoria=c; mat.unidad=u; mat.cantidad=q; } // Al editar, solo ajusta base
+    if(mat) { mat.nombre=nombreEstandar; mat.categoria=c; mat.unidad=u; mat.cantidad=q; } 
   } else {
-    // Modo Agregar: Buscar si ya existe la misma materia prima
-    const matExistente = inventario.find(x => x.nombre.toLowerCase() === nombreEstandar.toLowerCase() && x.unidad === u);
+    // BUSCAR SOLO POR NOMBRE (Ignorando la unidad para unificar)
+    const matExistente = inventario.find(x => x.nombre.toLowerCase() === nombreEstandar.toLowerCase());
 
     if (matExistente) {
-      matExistente.cantidad += q;
-      matExistente.historial.push({fecha: f, cantidad: q});
+      // Convierte la cantidad nueva a la unidad que ya tiene registrada la bodega
+      const cantidadConvertida = getConversion(q, u, matExistente.unidad);
+      matExistente.cantidad += cantidadConvertida;
+      // Guardamos la unidad original de la compra para el historial visual
+      matExistente.historial.push({fecha: f, cantidad: q, unidad_compra: u});
     } else {
       inventario.push({
         id: getNextId(inventario), 
@@ -175,7 +178,7 @@ function addMateriaPrima() {
         categoria: c, 
         unidad: u, 
         cantidad: q, 
-        historial: [{fecha: f, cantidad: q}]
+        historial: [{fecha: f, cantidad: q, unidad_compra: u}]
       });
     }
   }
@@ -193,7 +196,7 @@ function verHistorialMateria(id) {
   if(!mat.historial || mat.historial.length === 0) {
     lista.innerHTML = '<li>Sin registros.</li>';
   } else {
-    lista.innerHTML = mat.historial.map(h => `<li>📅 <strong>${h.fecha}:</strong> Se ingresaron ${h.cantidad}${mat.unidad}</li>`).join('');
+    lista.innerHTML = mat.historial.map(h => `<li>📅 <strong>${h.fecha}:</strong> Se ingresaron ${h.cantidad} ${h.unidad_compra || mat.unidad}</li>`).join('');
   }
   document.getElementById('modalHistorial').style.display = 'flex';
 }
@@ -206,11 +209,11 @@ function editarMateriaPrima(id) {
   document.getElementById('invUnidad').value = m.unidad;
   document.getElementById('invCantidad').value = m.cantidad;
   document.getElementById('invFechaCompra').value = new Date().toISOString().split('T')[0];
-  document.getElementById('btnGuardarInv').textContent = "Ajustar (No afecta historial)";
+  document.getElementById('btnGuardarInv').textContent = "Ajustar Total";
 }
 
 function eliminarMateriaPrima(id) {
-  if(!confirm("¿Eliminar ingrediente por completo?")) return;
+  if(!confirm("¿Eliminar ingrediente por completo de la base de datos?")) return;
   id = Number(id); inventario=inventario.filter(x=>x.id!==id); syncInv(); renderTodo();
 }
 
@@ -226,7 +229,9 @@ function renderInv() {
   </tr>`).join('');
 }
 
+// ==========================================
 // 2. RECETAS
+// ==========================================
 function addFilaIngrediente(ingData = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
   div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
@@ -264,7 +269,9 @@ function renderRct() {
   }).join('');
 }
 
+// ==========================================
 // 3. PRODUCTOS / MENÚ
+// ==========================================
 function addFilaRecetaProducto(rItem = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
   div.innerHTML=`<select class="proRecetaId">${recetas.map(r=>`<option value="${r.id}" ${rItem&&rItem.id_receta===r.id?'selected':''}>${r.nombre}</option>`).join('')}</select><input type="number" class="proRecetaCant" min="1" placeholder="Cant." value="${rItem?rItem.cantidad:1}"><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
@@ -308,7 +315,9 @@ function renderPro() {
   }).join('');
 }
 
+// ==========================================
 // 4. VENTAS
+// ==========================================
 function toggleAdelanto() { document.getElementById('divAdelanto').style.display = document.getElementById('ordEstadoPago').value==='Adelanto'?'flex':'none'; }
 function addItemRow() {
   const div=document.createElement('div'); div.className='item-row';
@@ -421,7 +430,9 @@ function renderOrd() {
   }).join('');
 }
 
+// ==========================================
 // 5. COCINA
+// ==========================================
 function cambiarEstadoTar(id, st) { 
   id = Number(id); const t = tareas.find(x=>x.id===id); if(!t)return; 
   let promises = [];
