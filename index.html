@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TamaCakes — Inventario y Producción</title>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">Tama<span>Cakes</span></div>
+    <p class="login-sub">Gestión de Inventario y Producción</p>
+    
+    <div class="fg" style="margin-bottom:1rem; text-align:left;">
+       <input type="email" id="loginEmail" placeholder="Correo electrónico">
+    </div>
+    <div class="fg" style="margin-bottom:1.5rem; text-align:left;">
+       <input type="password" id="loginPass" placeholder="Contraseña">
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="iniciarSesion()">Ingresar al Sistema</button>
+    <div id="loginMsg"></div>
+    
+    <hr class="divider">
+    <div class="sec-note">🔒 Sistema protegido por Firebase Auth</div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-brand">TamaCakes <small>Gestión Empresarial</small></div>
+    <div class="topbar-user">
+      <span id="userName"></span>
+      <button class="btn-logout" onclick="logout()">Salir</button>
+    </div>
+  </div>
+  <div class="sync-bar">
+    <span class="sync-dot" id="syncDot"></span>
+    <span id="syncMsg">Sincronizado</span>
+  </div>
+  
+  <div class="main">
+    <div id="alertasGlobales"></div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('inv',this)">🌾 Materia Prima</button>
+      <button class="tab-btn" onclick="switchTab('rct',this)">📜 Recetas</button>
+      <button class="tab-btn" onclick="switchTab('pro',this)">🍰 Productos</button>
+      <button class="tab-btn" onclick="switchTab('tar',this)">👨‍🍳 Cocina</button>
+      <button class="tab-btn" onclick="switchTab('ord',this)">🛍️ Ventas</button>
+    </div>
+
+    <div class="tab-pane active" id="tab-inv">
+      <div id="rolBannerInv"></div>
+      <div class="card" id="formCardInv">
+        <div class="card-title">Registrar Ingrediente</div>
+        <div class="form-grid">
+          <div class="fg"><label>Nombre</label><input type="text" id="invNombre" placeholder="Ej: Harina"></div>
+          <div class="fg"><label>Categoría</label><input type="text" id="invCategoria" placeholder="Ej: Secos"></div>
+          <div class="fg"><label>Unidad</label><select id="invUnidad"><option value="g">Gramos (g)</option><option value="kg">Kilos (kg)</option><option value="ml">Mililitros (ml)</option><option value="unidades">Unidades</option></select></div>
+          <div class="fg"><label>Stock Actual</label><input type="number" id="invCantidad" min="0" step="0.01"></div>
+          <div class="fg"><label>Costo X Unidad ($)</label><input type="number" step="0.001" id="invCosto" min="0"></div>
+          <div class="fg"><label>&nbsp;</label><button class="btn btn-primary" onclick="addMateriaPrima()">+ Añadir</button></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Nombre</th><th>Categoría</th><th>Disponibles</th><th>Costo Unidad</th><th id="thDel">Acción</th></tr></thead>
+          <tbody id="tbodyInv"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-rct">
+      <div class="card">
+        <div class="card-title">Crear Receta Base</div>
+        <div class="form-grid" style="margin-bottom:1rem;">
+          <div class="fg"><label>Nombre de Receta</label><input type="text" id="rctNombre" placeholder="Ej: Masa Vainilla"></div>
+        </div>
+        <div style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--border);">
+          <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios:</label>
+          <div id="listaIngredientesReceta" style="margin-top:10px;"></div>
+          <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente a la lista</button>
+        </div>
+        <button class="btn btn-primary" style="margin-top:1rem;" onclick="guardarReceta()">Guardar Receta Completa</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Receta</th><th>Ingredientes Requeridos</th><th>Costo Prep.</th><th>Acción</th></tr></thead>
+          <tbody id="tbodyRct"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-pro">
+      <div class="card">
+        <div class="card-title">Registrar Producto para Venta</div>
+        <div class="form-grid">
+          <div class="fg"><label>Nombre Producto</label><input type="text" id="proNombre"></div>
+          <div class="fg"><label>Categoría</label><input type="text" id="proCategoria"></div>
+          <div class="fg"><label>Receta Vinculada</label><select id="proReceta"></select></div>
+          <div class="fg"><label>Precio Venta ($)</label><input type="number" step="0.01" id="proPrecio"></div>
+          <div class="fg"><label>&nbsp;</label><button class="btn btn-primary" onclick="addProducto()">+ Catálogo</button></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Producto</th><th>Stock Disponible</th><th>Costo</th><th>Precio</th><th>Ganancia</th><th>Acción</th></tr></thead>
+          <tbody id="tbodyPro"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-tar">
+      <div class="card">
+        <div class="card-title">Orden de Producción</div>
+        <p style="font-size:.8rem; color:#9c7a60; margin-bottom:1rem;">Al completar, descontará ingredientes automáticamente.</p>
+        <div class="form-grid">
+          <div class="fg"><label>¿Qué cocinaremos?</label><select id="tarProducto"></select></div>
+          <div class="fg"><label>Cantidad</label><input type="number" id="tarCantidad" min="1"></div>
+          <div class="fg"><label>Fecha Límite</label><input type="date" id="tarFecha"></div>
+          <div class="fg"><label>Notas</label><input type="text" id="tarDesc"></div>
+          <div class="fg"><label>&nbsp;</label><button class="btn btn-primary" onclick="addTarea()">Agendar</button></div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>A Producir</th><th>Fecha Límite</th><th>Notas</th><th>Estado</th><th>Acción</th></tr></thead>
+          <tbody id="tbodyTar"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="tab-pane" id="tab-ord">
+      <div class="card">
+        <div class="card-title">Registrar Venta</div>
+        <div class="form-grid" style="border-bottom:1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
+          <div class="fg"><label>Cliente</label><input type="text" id="ordCliente"></div>
+          <div class="fg"><label>Entrega</label><input type="date" id="ordFechaEnt"></div>
+          <div class="fg"><label>Método Pago</label><select id="ordMetodo"><option>Efectivo</option><option>Transferencia</option></select></div>
+          <div class="fg"><label>Estado Pago</label><select id="ordEstadoPago" onchange="toggleAdelanto()"><option>Por pagar</option><option value="Adelanto">Adelanto</option><option>Pagado</option></select></div>
+          <div class="fg" id="divAdelanto" style="display:none;"><label>Monto Adelanto</label><input type="number" id="ordAdelanto"></div>
+          <input type="hidden" id="ordFechaPed">
+        </div>
+        <div id="ordenItems"></div>
+        <div style="display:flex; gap:.6rem; margin-top:1rem;">
+          <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir de vitrina</button>
+          <button class="btn btn-success" onclick="agendarPedido()">✓ Finalizar Venta</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input class="search-box" type="text" id="filtroOrd" placeholder="🔍 Buscar ventas…" oninput="renderTablaOrd()">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cliente</th><th>Productos Vendidos</th><th>Fechas</th><th>Finanzas</th><th>Estado Venta</th></tr></thead>
+          <tbody id="tbodyOrd"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
