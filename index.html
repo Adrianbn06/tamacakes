@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TamaCakes — Inventario y Producción</title>
+  <title>TamaCakes — Producción</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,8 +50,8 @@
       <button class="tab-btn active" onclick="switchTab('inv',this)">🌾 Materia Prima</button>
       <button class="tab-btn" onclick="switchTab('rct',this)">📜 Recetas</button>
       <button class="tab-btn" onclick="switchTab('pro',this)">🍰 Productos</button>
-      <button class="tab-btn" onclick="switchTab('tar',this)">👨‍🍳 Cocina</button>
       <button class="tab-btn" onclick="switchTab('ord',this)">🛍️ Ventas</button>
+      <button class="tab-btn" onclick="switchTab('tar',this)">👨‍🍳 Cocina (To-Do)</button>
     </div>
 
     <div class="tab-pane active" id="tab-inv">
@@ -98,7 +98,7 @@
 
     <div class="tab-pane" id="tab-pro">
       <div class="card">
-        <div class="card-title">Registrar Producto para Venta</div>
+        <div class="card-title">Registrar Producto Base</div>
         <div class="form-grid">
           <div class="fg"><label>Nombre Producto</label><input type="text" id="proNombre"></div>
           <div class="fg"><label>Categoría</label><input type="text" id="proCategoria"></div>
@@ -111,26 +111,6 @@
         <table>
           <thead><tr><th>Producto</th><th>Stock Disponible</th><th>Costo</th><th>Precio</th><th>Ganancia</th><th>Acción</th></tr></thead>
           <tbody id="tbodyPro"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="tab-pane" id="tab-tar">
-      <div class="card">
-        <div class="card-title">Orden de Producción</div>
-        <p style="font-size:.8rem; color:#9c7a60; margin-bottom:1rem;">Al completar, aumentará el stock de productos en vitrina y gastará los ingredientes necesarios.</p>
-        <div class="form-grid">
-          <div class="fg"><label>¿Qué cocinaremos?</label><select id="tarProducto"></select></div>
-          <div class="fg"><label>Cantidad</label><input type="number" id="tarCantidad" min="1"></div>
-          <div class="fg"><label>Fecha Límite</label><input type="date" id="tarFecha"></div>
-          <div class="fg"><label>Notas</label><input type="text" id="tarDesc"></div>
-          <div class="fg"><label>&nbsp;</label><button class="btn btn-primary" onclick="addTarea()">Agendar</button></div>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>A Producir</th><th>Fecha Límite</th><th>Notas</th><th>Estado</th><th>Acción</th></tr></thead>
-          <tbody id="tbodyTar"></tbody>
         </table>
       </div>
     </div>
@@ -148,8 +128,8 @@
         </div>
         <div id="ordenItems"></div>
         <div style="display:flex; gap:.6rem; margin-top:1rem;">
-          <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir de vitrina</button>
-          <button class="btn btn-success" onclick="agendarPedido()">✓ Finalizar Venta</button>
+          <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir pastel</button>
+          <button class="btn btn-success" onclick="agendarPedido()">✓ Agendar Pedido y Enviar a Cocina</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -159,6 +139,33 @@
         </table>
       </div>
     </div>
+
+    <div class="tab-pane" id="tab-tar">
+      <div class="card">
+        <div class="card-title">👨‍🍳 To-Do List (Cocina)</div>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">
+          Las tareas aparecen aquí <b>automáticamente</b> cuando agendas una venta. El sistema calcula si tienes ingredientes suficientes para hacerlas.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>A Preparar / Análisis de Stock</th><th>Fecha Límite</th><th>Cliente / Notas</th><th>Estado de Cocina</th><th>Acción</th></tr></thead>
+            <tbody id="tbodyTar"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1.5rem;">
+        <div class="card-title" style="font-size:0.95rem; color:#9c7a60;">+ Tarea extra manual (Para stock de vitrina)</div>
+        <div class="form-grid">
+          <div class="fg"><label>¿Qué cocinaremos?</label><select id="tarProducto"></select></div>
+          <div class="fg"><label>Cantidad</label><input type="number" id="tarCantidad" min="1"></div>
+          <div class="fg"><label>Fecha Límite</label><input type="date" id="tarFecha"></div>
+          <div class="fg"><label>Notas</label><input type="text" id="tarDesc" placeholder="Ej: Para tener de reserva"></div>
+          <div class="fg"><label>&nbsp;</label><button class="btn btn-outline" onclick="addTarea()">Agendar Extra</button></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
