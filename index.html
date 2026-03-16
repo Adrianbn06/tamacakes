@@ -25,7 +25,6 @@
     </div>
     <button class="btn btn-primary" style="width:100%;" onclick="iniciarSesion()">Ingresar al Sistema</button>
     <div id="loginMsg"></div>
-    
     <hr class="divider">
     <div class="sec-note">🔒 Sistema protegido por Firebase Auth</div>
   </div>
@@ -62,7 +61,7 @@
         <div class="form-grid">
           <div class="fg"><label>Nombre</label><input type="text" id="invNombre" placeholder="Ej: Harina"></div>
           <div class="fg"><label>Categoría</label><input type="text" id="invCategoria" placeholder="Ej: Secos"></div>
-          <div class="fg"><label>Unidad</label><select id="invUnidad"><option value="g">Gramos (g)</option><option value="kg">Kilos (kg)</option><option value="ml">Mililitros (ml)</option><option value="unidades">Unidades</option></select></div>
+          <div class="fg"><label>Unidad</label><select id="invUnidad"><option value="g">Gramos (g)</option><option value="kg">Kilos (kg)</option><option value="ml">Mililitros (ml)</option><option value="L">Litros (L)</option><option value="unidades">Unidades</option></select></div>
           <div class="fg"><label>Stock Actual</label><input type="number" id="invCantidad" min="0" step="0.01"></div>
           <div class="fg"><label>Costo X Unidad ($)</label><input type="number" step="0.001" id="invCosto" min="0"></div>
           <div class="fg"><label>&nbsp;</label><button class="btn btn-primary" onclick="addMateriaPrima()">+ Añadir</button></div>
@@ -78,7 +77,7 @@
 
     <div class="tab-pane" id="tab-rct">
       <div class="card">
-        <div class="card-title">Crear Receta Base</div>
+        <div class="card-title">Crear / Editar Receta</div>
         <div class="form-grid" style="margin-bottom:1rem;">
           <div class="fg"><label>Nombre de Receta</label><input type="text" id="rctNombre" placeholder="Ej: Masa Vainilla"></div>
         </div>
@@ -87,11 +86,11 @@
           <div id="listaIngredientesReceta" style="margin-top:10px;"></div>
           <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente a la lista</button>
         </div>
-        <button class="btn btn-primary" style="margin-top:1rem;" onclick="guardarReceta()">Guardar Receta Completa</button>
+        <button id="btnGuardarReceta" class="btn btn-primary" style="margin-top:1rem;" onclick="guardarReceta()">Guardar Receta Completa</button>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Receta</th><th>Ingredientes Requeridos</th><th>Costo Prep.</th><th>Acción</th></tr></thead>
+          <thead><tr><th>Receta</th><th>Ingredientes Requeridos</th><th>Costo Prep.</th><th>Acciones</th></tr></thead>
           <tbody id="tbodyRct"></tbody>
         </table>
       </div>
@@ -119,7 +118,7 @@
     <div class="tab-pane" id="tab-tar">
       <div class="card">
         <div class="card-title">Orden de Producción</div>
-        <p style="font-size:.8rem; color:#9c7a60; margin-bottom:1rem;">Al completar, descontará ingredientes automáticamente.</p>
+        <p style="font-size:.8rem; color:#9c7a60; margin-bottom:1rem;">Al completar, aumentará el stock de productos en vitrina y gastará los ingredientes necesarios.</p>
         <div class="form-grid">
           <div class="fg"><label>¿Qué cocinaremos?</label><select id="tarProducto"></select></div>
           <div class="fg"><label>Cantidad</label><input type="number" id="tarCantidad" min="1"></div>
@@ -152,9 +151,6 @@
           <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir de vitrina</button>
           <button class="btn btn-success" onclick="agendarPedido()">✓ Finalizar Venta</button>
         </div>
-      </div>
-      <div class="toolbar">
-        <input class="search-box" type="text" id="filtroOrd" placeholder="🔍 Buscar ventas…" oninput="renderTablaOrd()">
       </div>
       <div class="table-wrap">
         <table>
