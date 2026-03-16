@@ -237,13 +237,13 @@ function renderInv() {
   if(!inventario.length) { tb.innerHTML='<tr><td colspan="5" class="empty">Sin ingredientes</td></tr>'; return; }
   tb.innerHTML = inventario.map(m=> {
     // Cálculo para visualización doble de stock
-    const otherStock = getDisplayConversion(m.quantidade, m.unidad);
-    const stockDisplay = `${m.quantidade.toFixed(2)} ${m.unidad}${otherStock ? ` / ${otherStock.quantity.toFixed(2)} ${otherStock.unit}` : ''}`;
+    const otherStock = getDisplayConversion(m.cantidad, m.unidad);
+    const stockDisplay = `${m.cantidad.toFixed(2)} ${m.unidad}${otherStock ? ` / ${otherStock.quantity.toFixed(2)} ${otherStock.unit}` : ''}`;
     
     return `<tr>
       <td><strong>${m.nombre}</strong></td>
       <td><span class="badge badge-gray">${m.categoria}</span></td>
-      <td style="${m.quantidade<5?'color:var(--rose);font-weight:bold':''}">${stockDisplay}</td>
+      <td style="${m.cantidad<5?'color:var(--rose);font-weight:bold':''}">${stockDisplay}</td>
       <td><button class="btn btn-outline btn-sm" onclick="verHistorialMateria(${m.id})">🛒 Ver Compras</button></td>
       <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarMateriaPrima(${m.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarMateriaPrima(${m.id})">🗑️</button></td>
     </tr>`;
@@ -258,14 +258,15 @@ function addFilaIngrediente(ingData = null) {
   
   // Cálculo para visualización doble en el selector de ingredientes
   const optionString = inventario.map(m=> {
-    const otherStock = getDisplayConversion(m.quantidade, m.unidad);
-    const bodegaDisplay = `Bodega: ${m.quantidade.toFixed(2)} ${m.unidad}${otherStock ? ` / ${otherStock.quantity.toFixed(2)} ${otherStock.unit}` : ''}`;
+    const otherStock = getDisplayConversion(m.cantidad, m.unidad);
+    const bodegaDisplay = `Bodega: ${m.cantidad.toFixed(2)} ${m.unidad}${otherStock ? ` / ${otherStock.quantity.toFixed(2)} ${otherStock.unit}` : ''}`;
     return `<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (${bodegaDisplay})</option>`;
   }).join('');
 
   div.innerHTML=`<select class="rctMateria">${optionString}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
   document.getElementById('listaIngredientesReceta').appendChild(div);
 }
+
 function guardarReceta() {
   const nom = document.getElementById('rctNombre').value, rend = Number(document.getElementById('rctRendimiento').value) || 1;
   const filas = [...document.querySelectorAll('.fila-ingrediente')];
