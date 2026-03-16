@@ -1,7 +1,5 @@
-// PON AQUÍ TU URL DE APPS SCRIPT
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznwikMctSh4afbtipMT3Do4yrefpT1XbDoUwzC9LOATjmTYUXMQWtGY8cCv-bndYxx/exec';
 
-// PON AQUÍ TUS CREDENCIALES DE FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyBxuYMmrJUfv28ao2hopmvp08ZRVuLnFcw",
   authDomain: "tamacakes-auth.firebaseapp.com",
@@ -16,12 +14,14 @@ const auth = firebase.auth();
 let currentUser = null;
 let inventario=[], recetas=[], productos=[], tareas=[], pedidos=[];
 let recetaEnEdicion = null; 
+let sortByDate = false; // Variable para el filtro de fechas
+
 const ESTADOS = ['Agendado','Realizando','Listo para entrega','Entregado'];
 const ESTADOS_TAR = ['Pendiente','En progreso','Completado'];
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 // ==========================================
-// VIGILANTE DE SESIÓN FIREBASE (Limpio)
+// VIGILANTE DE SESIÓN FIREBASE
 // ==========================================
 auth.onAuthStateChanged((user) => {
   if (user) {
@@ -112,7 +112,7 @@ function renderInv() {
 // 2. RECETAS
 function addFilaIngrediente(ingData = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
-  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (En bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
+  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
   document.getElementById('listaIngredientesReceta').appendChild(div);
 }
 function guardarReceta() {
@@ -226,22 +226,52 @@ function checkStockFaltantePedido(orden) {
   return false;
 }
 
+// BOTÓN DE ORDENAR POR FECHA
+function toggleSortPedidos() {
+  sortByDate = !sortByDate;
+  const btn = document.getElementById('btnSortOrd');
+  if(sortByDate) {
+      btn.classList.remove('btn-outline'); btn.classList.add('btn-primary');
+      btn.innerHTML = '📅 Ordenado por Cercanía';
+  } else {
+      btn.classList.add('btn-outline'); btn.classList.remove('btn-primary');
+      btn.innerHTML = '📅 Ordenar por Fecha de Entrega';
+  }
+  renderOrd();
+}
+
 function renderOrd() {
   const tb = document.getElementById('tbodyOrd');
   const kw = document.getElementById('filtroOrd') ? document.getElementById('filtroOrd').value.toLowerCase() : '';
-  const list = pedidos.filter(o=>o.cliente.toLowerCase().includes(kw));
+  let list = pedidos.filter(o=>o.cliente.toLowerCase().includes(kw));
   if(!list.length) { tb.innerHTML='<tr><td colspan="7" class="empty">Sin registros</td></tr>'; return; }
-  
+
+  // MAGIA 1: Ordenar y Enviar "Entregado" al final
+  list.sort((a, b) => {
+     if (a.estado === 'Entregado' && b.estado !== 'Entregado') return 1;
+     if (a.estado !== 'Entregado' && b.estado === 'Entregado') return -1;
+     if (sortByDate) return new Date(a.fecha_entrega) - new Date(b.fecha_entrega);
+     return 0; 
+  });
+
+  const hoy = new Date().toISOString().split('T')[0];
+
   tb.innerHTML = list.map(o=>{
     let tot=0; const txt=o.items.map(it=>{const p=productos.find(x=>x.id===it.productoId); if(p)tot+=p.precio_venta*it.cantidad; return `${p?p.nombre:'?'} x${it.cantidad}`;}).join('<br>');
     const adReal = o.estado_pago==='Pagado'?tot:o.adelanto;
     const stSel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="const p=pedidos.find(x=>x.id==='${o.id}');if(p){p.estado=this.value;syncOrd();}">${ESTADOS.map(e=>`<option ${o.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
     const avisoStock = checkStockFaltantePedido(o) ? '<span style="color:var(--rose); font-weight:bold; font-size:0.75rem;">⚠️ Falta Comprar Ingredientes</span>' : '<span style="color:var(--sage); font-size:0.75rem;">✓ Ingredientes Listos</span>';
 
-    return `<tr>
-      <td><strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
+    // MAGIA 2: Etiqueta de prioridad
+    let badgePrioridad = '';
+    if (o.estado !== 'Entregado' && o.fecha_entrega <= hoy) {
+        badgePrioridad = '<span class="badge badge-yellow" style="margin-bottom:6px;">🔥 Prioridad (Entrega)</span><br>';
+    }
+
+    return `<tr style="${o.estado === 'Entregado' ? 'opacity: 0.6; background: #f9f9f9;' : ''}">
+      <td>${badgePrioridad}<strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
       <td style="font-size:.8rem">${txt}</td>
-      <td style="font-size:.8rem">P: ${o.fecha_pedido}<br>E: ${o.fecha_entrega}</td>
+      <td style="font-size:.8rem">P: ${o.fecha_pedido}<br>E: <strong>${o.fecha_entrega}</strong></td>
       <td style="font-size:.8rem">Total: $${tot.toFixed(2)}<br>Falta: $${(tot-adReal).toFixed(2)}</td>
       <td>${stSel}</td>
       <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarPedido('${o.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarPedido('${o.id}')">🗑️</button></td>
@@ -283,12 +313,25 @@ function cambiarEstadoTar(id, st) {
     t.estado = st; 
   }
 
-  // ⭐ MAGIA: SI LA COCINA PONE "EN PROGRESO", LA VENTA PASA A "REALIZANDO"
+  // MAGIA 3: SI LA COCINA PONE "EN PROGRESO", LA VENTA PASA A "REALIZANDO"
   if (st === 'En progreso' && t.pedido_id) {
     const ord = pedidos.find(o => o.id === t.pedido_id);
-    if (ord && ord.estado !== 'Realizando') {
+    if (ord && ord.estado !== 'Realizando' && ord.estado !== 'Entregado') {
       ord.estado = 'Realizando';
       promises.push(syncOrd());
+    }
+  }
+  
+  // MAGIA 4: SI LA COCINA PONE "COMPLETADO", COMPROBAMOS SI TODO EL PEDIDO ESTÁ LISTO
+  if (st === 'Completado' && t.pedido_id) {
+    const parentOrder = pedidos.find(o => o.id === t.pedido_id);
+    if (parentOrder && parentOrder.estado !== 'Entregado' && parentOrder.estado !== 'Listo para entrega') {
+      const orderTasks = tareas.filter(x => x.pedido_id === t.pedido_id);
+      const allCompleted = orderTasks.every(x => x.estado === 'Completado');
+      if (allCompleted) {
+        parentOrder.estado = 'Listo para entrega';
+        promises.push(syncOrd());
+      }
     }
   }
 
@@ -297,6 +340,26 @@ function cambiarEstadoTar(id, st) {
 }
 
 function renderTar() {
+  // MAGIA 5: RESUMEN DE COCINA
+  const resumenContainer = document.getElementById('resumenCocina');
+  const pendientes = tareas.filter(t => t.estado === 'Pendiente');
+  
+  if(pendientes.length === 0) {
+      resumenContainer.innerHTML = '<strong style="color:#9c7a60;">Resumen a preparar:</strong> <span style="color:#888;">No hay pasteles pendientes.</span>';
+  } else {
+      const totales = {};
+      pendientes.forEach(t => {
+          if(!totales[t.producto_id]) totales[t.producto_id] = 0;
+          totales[t.producto_id] += t.cantidad_producir;
+      });
+      const htmlItems = Object.keys(totales).map(pId => {
+          const p = productos.find(x => x.id === pId);
+          return `<div style="display:inline-block; background:white; border:1px solid var(--caramel); padding:6px 12px; border-radius:8px; margin:4px 8px 4px 0;"><strong style="color:var(--rose); font-size:1.1rem;">${totales[pId]}x</strong> ${p ? p.nombre : '?'}</div>`;
+      });
+      resumenContainer.innerHTML = '<strong style="display:block; margin-bottom:10px; color:var(--brown);">Resumen Total de Producción (Pendientes):</strong>' + htmlItems.join('');
+  }
+
+  // TABLA DE TAREAS NORMAL
   const tb = document.getElementById('tbodyTar');
   if(!tareas.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Cocina libre de tareas</td></tr>'; return; }
   const sorted = [...tareas].sort((a,b)=>new Date(a.fecha_limite) - new Date(b.fecha_limite));
