@@ -51,8 +51,9 @@ function cargarDatos(email) {
     if (data.error) { auth.signOut(); return; }
     currentUser = { email, rol: data.rol };
     
+    // Parseo asegurando el rendimiento
     inventario = (data.inventario||[]).map(x=>({...x, cantidad:Number(x.cantidad), costo:Number(x.costo)}));
-    recetas = (data.recetas||[]).map(x=>({...x, ingredientes:JSON.parse(x.ingredientes||'[]')}));
+    recetas = (data.recetas||[]).map(x=>({...x, rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]')}));
     productos = (data.productos||[]).map(x=>({...x, costo_produccion:Number(x.costo_produccion), precio_venta:Number(x.precio_venta)}));
     tareas = (data.tareas||[]).map(x=>({...x, cantidad_producir:Number(x.cantidad_producir)}));
     pedidos = (data.pedidos||[]).map(x=>({...x, items:JSON.parse(x.items||'[]'), adelanto:Number(x.adelanto)}));
@@ -79,12 +80,12 @@ function renderTodo() { renderInv(); renderRct(); renderPro(); renderTar(); rend
 
 function checkAlertas() {
   const alertas = [];
-  inventario.forEach(m => { if(m.cantidad < 5) alertas.push(`Materia prima baja: ${m.nombre} (${m.cantidad} ${m.unidad})`); });
+  inventario.forEach(m => { if(m.cantidad < 5) alertas.push(`Materia prima baja: ${m.nombre} (${m.cantidad.toFixed(2)} ${m.unidad})`); });
   document.getElementById('alertasGlobales').innerHTML = alertas.length ? `<div class="alert-box"><strong>⚠️ Alertas de Bodega:</strong><br>${alertas.join('<br>')}</div>` : '';
 }
 
 // =====================================
-// FUNCIONES DE CONVERSIÓN MATEMÁTICA
+// CONVERSIÓN MATEMÁTICA
 // =====================================
 function getConversion(cant, uReceta, uInv) {
   if(!uReceta || uReceta === uInv) return cant;
@@ -108,12 +109,12 @@ function renderInv() {
   tb.innerHTML = inventario.map(m=>`<tr><td><strong>${m.nombre}</strong></td><td><span class="badge badge-gray">${m.categoria}</span></td><td style="${m.cantidad<5?'color:red;font-weight:bold':''}">${m.cantidad.toFixed(2)} ${m.unidad}</td><td>$${m.costo} c/${m.unidad}</td><td><button class="btn btn-danger btn-icon" onclick="inventario=inventario.filter(x=>x.id!=='${m.id}');syncInv();renderTodo();">🗑️</button></td></tr>`).join('');
 }
 
-// 2. RECETAS 
+// 2. RECETAS CON RENDIMIENTO Y COSTO UNITARIO
 function addFilaIngrediente(ingData = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
   div.innerHTML=`
     <select class="rctMateria">
-      ${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad}${m.unidad})</option>`).join('')}
+      ${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}
     </select>
     <input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}">
     <select class="rctUnidad">
@@ -130,6 +131,7 @@ function addFilaIngrediente(ingData = null) {
 
 function guardarReceta() {
   const nom = document.getElementById('rctNombre').value;
+  const rend = Number(document.getElementById('rctRendimiento').value) || 1;
   const filas = [...document.querySelectorAll('.fila-ingrediente')];
   if(!nom || !filas.length) return alert('Falta nombre o ingredientes.');
 
@@ -140,16 +142,19 @@ function guardarReceta() {
   }));
 
   if(recetaEnEdicion) recetas = recetas.filter(r=>r.id!==recetaEnEdicion);
-  recetas.push({id: recetaEnEdicion || genId(), nombre:nom, ingredientes:ings});
+  recetas.push({id: recetaEnEdicion || genId(), nombre:nom, rendimiento:rend, ingredientes:ings});
 
-  document.getElementById('rctNombre').value=''; document.getElementById('listaIngredientesReceta').innerHTML='';
+  document.getElementById('rctNombre').value=''; document.getElementById('rctRendimiento').value='1'; 
+  document.getElementById('listaIngredientesReceta').innerHTML='';
   recetaEnEdicion = null; document.getElementById('btnGuardarReceta').textContent = "Guardar Receta Completa";
   syncRct().then(renderTodo);
 }
 
 function editarReceta(id) {
   const r = recetas.find(x=>x.id===id); if(!r) return;
-  recetaEnEdicion = id; document.getElementById('rctNombre').value = r.nombre;
+  recetaEnEdicion = id; 
+  document.getElementById('rctNombre').value = r.nombre;
+  document.getElementById('rctRendimiento').value = r.rendimiento || 1;
   document.getElementById('listaIngredientesReceta').innerHTML = '';
   r.ingredientes.forEach(ing => addFilaIngrediente(ing));
   document.getElementById('btnGuardarReceta').textContent = "Actualizar Receta";
@@ -161,6 +166,7 @@ function eliminarReceta(id) {
   syncRct().then(renderTodo);
 }
 
+// Calcula el costo de la receta ENTERA
 function calCostoRct(id_rct) {
   const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
   return r.ingredientes.reduce((t, ing) => { 
@@ -169,21 +175,32 @@ function calCostoRct(id_rct) {
   }, 0);
 }
 
+// Calcula el costo de UNA SOLA UNIDAD (Para el margen real)
+function calCostoUnitarioRct(id_rct) {
+  const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
+  return calCostoRct(id_rct) / (r.rendimiento || 1);
+}
+
 function renderRct() {
   const tb = document.getElementById('tbodyRct');
-  if(!recetas.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Sin recetas</td></tr>'; return; }
+  if(!recetas.length) { tb.innerHTML='<tr><td colspan="5" class="empty">Sin recetas</td></tr>'; return; }
   tb.innerHTML = recetas.map(r=>{
-    const txt = r.ingredientes.map(i=>{const m=inventario.find(x=>x.id===i.id_materia); return m?`${i.cantidad}${i.unidad||m.unidad} ${m.nombre}`:'?';}).join('<br>');
-    return `<tr><td><strong>${r.nombre}</strong></td><td style="font-size:.8rem">${txt}</td><td>$${calCostoRct(r.id).toFixed(2)}</td>
-    <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarReceta('${r.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarReceta('${r.id}')">🗑️</button></td></tr>`;
+    return `<tr>
+      <td><strong>${r.nombre}</strong></td>
+      <td>Rinde: ${r.rendimiento || 1} uds</td>
+      <td>$${calCostoRct(r.id).toFixed(2)}</td>
+      <td><strong style="color:var(--sage)">$${calCostoUnitarioRct(r.id).toFixed(2)} c/u</strong></td>
+      <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarReceta('${r.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarReceta('${r.id}')">🗑️</button></td>
+    </tr>`;
   }).join('');
 }
 
-// 3. PRODUCTOS (CATÁLOGO / MENÚ)
+// 3. PRODUCTOS (MENÚ) -> AHORA USA EL COSTO UNITARIO
 function addProducto() {
   const n=document.getElementById('proNombre').value, c=document.getElementById('proCategoria').value, r=document.getElementById('proReceta').value, p=Number(document.getElementById('proPrecio').value);
   if(!n||!r)return;
-  productos.push({id:genId(), nombre:n, categoria:c, id_receta:r, precio_venta:p, costo_produccion:calCostoRct(r)});
+  // Guardamos el costo de producir 1 SOLA UNIDAD
+  productos.push({id:genId(), nombre:n, categoria:c, id_receta:r, precio_venta:p, costo_produccion:calCostoUnitarioRct(r)});
   syncPro(); renderTodo();
 }
 function renderPro() {
@@ -192,7 +209,7 @@ function renderPro() {
   tb.innerHTML = productos.map(p=>`<tr><td><strong>${p.nombre}</strong></td><td><span class="badge badge-gray">${p.categoria}</span></td><td>$${p.costo_produccion.toFixed(2)}</td><td>$${p.precio_venta.toFixed(2)}</td><td style="color:var(--sage)">+$${(p.precio_venta-p.costo_produccion).toFixed(2)}</td><td><button class="btn btn-danger btn-icon" onclick="productos=productos.filter(x=>x.id!=='${p.id}');syncPro();renderTodo();">🗑️</button></td></tr>`).join('');
 }
 
-// 4. VENTAS (COMPRUEBA MATERIA PRIMA Y ENVÍA A COCINA)
+// 4. VENTAS -> COMPRUEBA PROPORCIÓN EXACTA DE MATERIA PRIMA
 function toggleAdelanto() { document.getElementById('divAdelanto').style.display = document.getElementById('ordEstadoPago').value==='Adelanto'?'block':'none'; }
 function addItemRow() {
   const div=document.createElement('div'); div.className='item-row';
@@ -212,47 +229,45 @@ function agendarPedido() {
   const items = [...document.querySelectorAll('.item-row')].map(r=>({productoId:r.querySelector('.ordProd').value, cantidad:Number(r.querySelector('.ordCant').value)}));
   if(!items.length || items.some(i=>i.cantidad<=0)) return alert('Ingresa cantidades válidas.');
   
-  // 1. CALCULAMOS TODA LA MATERIA PRIMA NECESARIA PARA ESTE PEDIDO
-  let matNecesaria = {}; // { id_materia: cantidad_total_a_descontar }
+  // 1. CALCULAMOS MATERIA PRIMA PROPORCIONAL
+  let matNecesaria = {}; 
   
   for(const it of items) {
     const p = productos.find(x=>x.id===it.productoId);
     if(!p) return alert('Producto no encontrado');
     const rct = recetas.find(x=>x.id===p.id_receta);
-    if(!rct) return alert(`El producto ${p.nombre} no tiene una receta vinculada.`);
+    if(!rct) return alert(`El producto ${p.nombre} no tiene receta.`);
     
     rct.ingredientes.forEach(ing => {
       const mat = inventario.find(x=>x.id===ing.id_materia);
       if(!mat) return;
-      const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * it.cantidad;
+      // Magia: (Ingrediente total de la receta / Rendimiento de la receta) * Cantidad de pasteles pedidos
+      const fraccionRequerida = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (it.cantidad / (rct.rendimiento || 1));
+      
       if(!matNecesaria[mat.id]) matNecesaria[mat.id] = 0;
-      matNecesaria[mat.id] += req;
+      matNecesaria[mat.id] += fraccionRequerida;
     });
   }
 
-  // 2. COMPROBAMOS SI HAY SUFICIENTE STOCK EN BODEGA
+  // 2. COMPROBAMOS STOCK
   let faltantes = [];
   for(const id in matNecesaria) {
     const mat = inventario.find(x=>x.id===id);
     if(mat.cantidad < matNecesaria[id]) {
-      faltantes.push(`- ${mat.nombre}: Necesitas ${matNecesaria[id].toFixed(2)}${mat.unidad}, pero solo tienes ${mat.cantidad.toFixed(2)}${mat.unidad}.`);
+      faltantes.push(`- ${mat.nombre}: Necesitas ${matNecesaria[id].toFixed(2)}${mat.unidad}, tienes ${mat.cantidad.toFixed(2)}${mat.unidad}.`);
     }
   }
 
-  if(faltantes.length > 0) {
-    return alert('❌ IMPOSIBLE AGENDAR PEDIDO. Faltan los siguientes ingredientes en bodega:\n\n' + faltantes.join('\n'));
-  }
+  if(faltantes.length > 0) return alert('❌ NO HAY STOCK SUFICIENTE EN BODEGA PARA HACER ESTE PEDIDO:\n\n' + faltantes.join('\n'));
 
-  // 3. SI TODO ESTÁ BIEN, DESCONTAMOS LA MATERIA PRIMA (Queda reservada/gastada)
+  // 3. DESCONTAMOS LA MATERIA PRIMA EXACTA
   for(const id in matNecesaria) {
     const mat = inventario.find(x=>x.id===id);
     mat.cantidad -= matNecesaria[id];
   }
   
-  // 4. GUARDAMOS EL PEDIDO
+  // 4. GUARDAMOS VENTA Y ENVIAMOS A COCINA
   pedidos.push({id:genId(), cliente:c, items, fecha_pedido:fP, fecha_entrega:fE, metodo_pago:m, estado_pago:stP, adelanto:ad, estado:ESTADOS[0]});
-  
-  // 5. GENERAMOS LAS TAREAS PARA LA COCINA
   items.forEach(it => {
     tareas.push({id:genId(), producto_id:it.productoId, cantidad_producir:it.cantidad, fecha_limite:fE, descripcion:`Cliente: ${c}`, estado:'Pendiente'});
   });
@@ -260,8 +275,7 @@ function agendarPedido() {
   Promise.all([syncOrd(), syncTar(), syncInv()]).then(()=>{ 
     document.getElementById('ordenItems').innerHTML=''; addItemRow(); 
     document.getElementById('ordCliente').value='';
-    renderTodo(); 
-    alert('✅ Pedido exitoso. Ingredientes descontados y tareas enviadas a cocina.'); 
+    renderTodo(); alert('✅ Venta registrada y enviada a cocina. Ingredientes descontados.'); 
   });
 }
 
@@ -278,33 +292,23 @@ function renderOrd() {
   }).join('');
 }
 
-// 5. COCINA (TO-DO LIST) -> AHORA SOLO CAMBIA ESTADOS, NO DESCUENTA STOCK (Ya se descontó al vender)
+// 5. COCINA
 function cambiarEstadoTar(id, st) {
   const t = tareas.find(x=>x.id===id); if(!t)return;
-  t.estado = st; 
-  syncTar().then(renderTodo);
+  t.estado = st; syncTar().then(renderTodo);
 }
 
 function renderTar() {
   const tb = document.getElementById('tbodyTar');
   if(!tareas.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Cocina libre de tareas</td></tr>'; return; }
-  
   const sorted = [...tareas].sort((a,b)=>new Date(a.fecha_limite) - new Date(b.fecha_limite));
-
   tb.innerHTML = sorted.map(t=>{
     const p=productos.find(x=>x.id===t.producto_id);
     const sel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="cambiarEstadoTar('${t.id}',this.value)" ${t.estado==='Completado'?'disabled':''}>${ESTADOS_TAR.map(e=>`<option ${t.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
-    
-    return `<tr>
-      <td style="vertical-align:top;"><strong>${t.cantidad_producir}x ${p?p.nombre:'?'}</strong></td>
-      <td style="vertical-align:top;">${t.fecha_limite}</td>
-      <td style="vertical-align:top; font-size:0.85rem;">${t.descripcion}</td>
-      <td style="vertical-align:top;">${sel}</td>
-    </tr>`;
+    return `<tr><td style="vertical-align:top;"><strong>${t.cantidad_producir}x ${p?p.nombre:'?'}</strong></td><td style="vertical-align:top;">${t.fecha_limite}</td><td style="vertical-align:top; font-size:0.85rem;">${t.descripcion}</td><td style="vertical-align:top;">${sel}</td></tr>`;
   }).join('');
 }
 
-// NAVEGACIÓN
 function switchTab(name,btn){
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
