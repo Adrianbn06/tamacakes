@@ -13,12 +13,23 @@ const auth = firebase.auth();
 
 let currentUser = null;
 let inventario=[], recetas=[], productos=[], tareas=[], pedidos=[];
+
+// Variables de estado de edición
+let invEnEdicion = null;
 let recetaEnEdicion = null; 
+let proEnEdicion = null;
 let sortByDate = false; 
 
 const ESTADOS = ['Agendado','Realizando','Listo para entrega','Entregado'];
 const ESTADOS_TAR = ['Pendiente','En progreso','Completado'];
-const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+
+// ==========================================
+// NUEVO SISTEMA DE ID: AUTO-INCREMENTABLE
+// ==========================================
+function getNextId(arr) {
+  if (!arr || arr.length === 0) return 1;
+  return Math.max(...arr.map(item => Number(item.id) || 0)) + 1;
+}
 
 auth.onAuthStateChanged((user) => {
   if (user) {
@@ -52,11 +63,12 @@ function cargarDatos(email) {
     if (data.error) { auth.signOut(); return; }
     currentUser = { email, rol: data.rol };
     
-    inventario = (data.inventario||[]).map(x=>({...x, cantidad:Number(x.cantidad)}));
-    recetas = (data.recetas||[]).map(x=>({...x, rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]')}));
-    productos = (data.productos||[]).map(x=>({...x, precio_venta:Number(x.precio_venta), recetas:JSON.parse(x.recetas||'[]')}));
-    tareas = (data.tareas||[]).map(x=>({...x, cantidad_producir:Number(x.cantidad_producir)}));
-    pedidos = (data.pedidos||[]).map(x=>({...x, items:JSON.parse(x.items||'[]'), adelanto:Number(x.adelanto), notas:x.notas||'', celular:x.celular||''}));
+    // Parseamos todo a Número para que el Auto-Increment funcione perfecto
+    inventario = (data.inventario||[]).map(x=>({...x, id:Number(x.id), cantidad:Number(x.cantidad), fecha_compra:x.fecha_compra||''}));
+    recetas = (data.recetas||[]).map(x=>({...x, id:Number(x.id), rendimiento:Number(x.rendimiento)||1, ingredientes:JSON.parse(x.ingredientes||'[]').map(i=>({...i, id_materia:Number(i.id_materia), cantidad:Number(i.cantidad)}))}));
+    productos = (data.productos||[]).map(x=>({...x, id:Number(x.id), precio_venta:Number(x.precio_venta), recetas:JSON.parse(x.recetas||'[]').map(r=>({...r, id_receta:Number(r.id_receta), cantidad:Number(r.cantidad)}))}));
+    tareas = (data.tareas||[]).map(x=>({...x, id:Number(x.id), producto_id:Number(x.producto_id), pedido_id:Number(x.pedido_id), cantidad_producir:Number(x.cantidad_producir)}));
+    pedidos = (data.pedidos||[]).map(x=>({...x, id:Number(x.id), items:JSON.parse(x.items||'[]').map(i=>({...i, productoId:Number(i.productoId), cantidad:Number(i.cantidad)})), adelanto:Number(x.adelanto), notas:x.notas||'', celular:x.celular||''}));
 
     document.getElementById('userName').textContent = email.split('@')[0];
     document.getElementById('loginScreen').style.display = 'none';
@@ -66,6 +78,7 @@ function cargarDatos(email) {
     renderTodo();
     document.getElementById('ordFechaPed').value = new Date().toISOString().split('T')[0];
     document.getElementById('ordFechaEnt').value = new Date().toISOString().split('T')[0];
+    document.getElementById('invFechaCompra').value = new Date().toISOString().split('T')[0];
   });
 }
 
@@ -79,16 +92,15 @@ const syncOrd = async() => { setSyncing(true); await apiCall('savePedidos',{data
 function renderTodo() { renderInv(); renderRct(); renderPro(); renderTar(); renderOrd(); updateSelects(); checkAlertas(); }
 
 // ==========================================
-// NUEVO MOTOR DE ALERTAS CON BOTÓN DE CIERRE
+// ALERTAS (Silenciables por 3 horas)
 // ==========================================
 function checkAlertas() {
-  // Comprobar si las alertas están silenciadas (Snooze)
   const snoozeUntil = localStorage.getItem('alertasSnoozeUntil');
   if (snoozeUntil && Date.now() < Number(snoozeUntil)) {
     document.getElementById('alertasGlobales').innerHTML = '';
     return;
   }
-
+  
   const alertas = [];
   inventario.forEach(m => { 
     if(m.cantidad < 5) alertas.push(`Materia prima baja: ${m.nombre} (${m.cantidad.toFixed(2)} ${m.unidad})`); 
@@ -100,18 +112,14 @@ function checkAlertas() {
         <button class="alert-close" onclick="dismissAlertas()" title="Ocultar por 3 horas">✕</button>
         <strong style="color: #b33959;">⚠️ Alertas de Bodega:</strong><br>
         ${alertas.join('<br>')}
-      </div>
-    `;
-  } else {
-    document.getElementById('alertasGlobales').innerHTML = '';
-  }
+      </div>`;
+  } else { document.getElementById('alertasGlobales').innerHTML = ''; }
 }
 
-// Función para silenciar por 3 horas
-function dismissAlertas() {
-  const tresHorasEnMilisegundos = 3 * 60 * 60 * 1000; 
-  localStorage.setItem('alertasSnoozeUntil', Date.now() + tresHorasEnMilisegundos);
-  document.getElementById('alertasGlobales').innerHTML = '';
+function dismissAlertas() { 
+  const tresHorasMilisegundos = 3 * 60 * 60 * 1000;
+  localStorage.setItem('alertasSnoozeUntil', Date.now() + tresHorasMilisegundos); 
+  document.getElementById('alertasGlobales').innerHTML = ''; 
 }
 
 function getConversion(cant, uReceta, uInv) {
@@ -125,30 +133,50 @@ function getConversion(cant, uReceta, uInv) {
 
 // 1. MATERIA PRIMA
 function addMateriaPrima() {
-  const n=document.getElementById('invNombre').value, c=document.getElementById('invCategoria').value, u=document.getElementById('invUnidad').value, q=Number(document.getElementById('invCantidad').value);
-  if(!n) return;
-  inventario.push({id:genId(), nombre:n, categoria:c, unidad:u, cantidad:q});
-  syncInv(); renderTodo(); document.getElementById('invNombre').value=''; document.getElementById('invCantidad').value='';
+  const n=document.getElementById('invNombre').value, c=document.getElementById('invCategoria').value, u=document.getElementById('invUnidad').value, q=Number(document.getElementById('invCantidad').value), f=document.getElementById('invFechaCompra').value;
+  if(!n) return alert('Falta el nombre del ingrediente.');
+  
+  if (invEnEdicion) {
+    const mat = inventario.find(x => x.id === invEnEdicion);
+    if(mat) { mat.nombre=n; mat.categoria=c; mat.unidad=u; mat.cantidad=q; mat.fecha_compra=f; }
+  } else {
+    inventario.push({id: getNextId(inventario), nombre:n, categoria:c, unidad:u, cantidad:q, fecha_compra:f});
+  }
+
+  syncInv(); renderTodo(); 
+  document.getElementById('invNombre').value=''; document.getElementById('invCantidad').value=''; 
+  invEnEdicion = null; document.getElementById('btnGuardarInv').textContent = "+ Añadir";
 }
+
+function editarMateriaPrima(id) {
+  id = Number(id); const m = inventario.find(x=>x.id===id); if(!m) return;
+  invEnEdicion = id;
+  document.getElementById('invNombre').value = m.nombre;
+  document.getElementById('invCategoria').value = m.categoria;
+  document.getElementById('invUnidad').value = m.unidad;
+  document.getElementById('invCantidad').value = m.cantidad;
+  document.getElementById('invFechaCompra').value = m.fecha_compra || '';
+  document.getElementById('btnGuardarInv').textContent = "Actualizar Ingrediente";
+}
+
+function eliminarMateriaPrima(id) {
+  if(!confirm("¿Eliminar ingrediente?")) return;
+  id = Number(id); inventario=inventario.filter(x=>x.id!==id); syncInv(); renderTodo();
+}
+
 function renderInv() {
   const tb = document.getElementById('tbodyInv');
-  if(!inventario.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Sin ingredientes</td></tr>'; return; }
-  tb.innerHTML = inventario.map(m=>`<tr><td><strong>${m.nombre}</strong></td><td><span class="badge badge-gray">${m.categoria}</span></td><td style="${m.cantidad<5?'color:var(--rose);font-weight:bold':''}">${m.cantidad.toFixed(2)} ${m.unidad}</td><td><button class="btn btn-danger btn-icon" onclick="inventario=inventario.filter(x=>x.id!=='${m.id}');syncInv();renderTodo();">🗑️</button></td></tr>`).join('');
+  if(!inventario.length) { tb.innerHTML='<tr><td colspan="5" class="empty">Sin ingredientes</td></tr>'; return; }
+  tb.innerHTML = inventario.map(m=>`<tr>
+    <td><strong>${m.nombre}</strong></td>
+    <td><span class="badge badge-gray">${m.categoria}</span></td>
+    <td style="${m.cantidad<5?'color:var(--rose);font-weight:bold':''}">${m.cantidad.toFixed(2)} ${m.unidad}</td>
+    <td style="font-size:0.85rem; color:#666;">${m.fecha_compra || 'N/A'}</td>
+    <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarMateriaPrima(${m.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarMateriaPrima(${m.id})">🗑️</button></td>
+  </tr>`).join('');
 }
 
 // 2. RECETAS
-function calCostoRct(id_rct) {
-  const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
-  return r.ingredientes.reduce((t, ing) => { 
-    const m=inventario.find(x=>x.id===ing.id_materia); if(!m) return t;
-    return t + (m.costo * getConversion(ing.cantidad, ing.unidad||m.unidad, m.unidad)); 
-  }, 0);
-}
-function calCostoUnitarioRct(id_rct) {
-  const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
-  return calCostoRct(id_rct) / (r.rendimiento || 1);
-}
-
 function addFilaIngrediente(ingData = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
   div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
@@ -158,69 +186,81 @@ function guardarReceta() {
   const nom = document.getElementById('rctNombre').value, rend = Number(document.getElementById('rctRendimiento').value) || 1;
   const filas = [...document.querySelectorAll('.fila-ingrediente')];
   if(!nom || !filas.length) return alert('Falta nombre o ingredientes.');
-  const ings = filas.map(f=>({ id_materia: f.querySelector('.rctMateria').value, cantidad: Number(f.querySelector('.rctCant').value), unidad: f.querySelector('.rctUnidad').value }));
+  const ings = filas.map(f=>({ id_materia: Number(f.querySelector('.rctMateria').value), cantidad: Number(f.querySelector('.rctCant').value), unidad: f.querySelector('.rctUnidad').value }));
+  
   if(recetaEnEdicion) recetas = recetas.filter(r=>r.id!==recetaEnEdicion);
-  recetas.push({id: recetaEnEdicion || genId(), nombre:nom, rendimiento:rend, ingredientes:ings});
+  recetas.push({id: recetaEnEdicion || getNextId(recetas), nombre:nom, rendimiento:rend, ingredientes:ings});
+  
   document.getElementById('rctNombre').value=''; document.getElementById('rctRendimiento').value='1'; document.getElementById('listaIngredientesReceta').innerHTML='';
   recetaEnEdicion = null; document.getElementById('btnGuardarReceta').textContent = "Guardar Receta";
   syncRct().then(renderTodo);
 }
 function editarReceta(id) {
-  const r = recetas.find(x=>x.id===id); if(!r) return;
+  id = Number(id); const r = recetas.find(x=>x.id===id); if(!r) return;
   recetaEnEdicion = id; document.getElementById('rctNombre').value = r.nombre; document.getElementById('rctRendimiento').value = r.rendimiento || 1;
   document.getElementById('listaIngredientesReceta').innerHTML = ''; r.ingredientes.forEach(ing => addFilaIngrediente(ing));
   document.getElementById('btnGuardarReceta').textContent = "Actualizar Receta";
 }
 function eliminarReceta(id) {
   if(!confirm("¿Eliminar receta?")) return;
-  recetas = recetas.filter(x=>x.id!==id); syncRct().then(renderTodo);
+  id = Number(id); recetas = recetas.filter(x=>x.id!==id); syncRct().then(renderTodo);
 }
 function renderRct() {
   const tb = document.getElementById('tbodyRct');
   if(!recetas.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Sin recetas</td></tr>'; return; }
   tb.innerHTML = recetas.map(r=>{
     const txt = r.ingredientes.map(i=>{const m=inventario.find(x=>x.id===i.id_materia); return m?`${i.cantidad}${i.unidad||m.unidad} ${m.nombre}`:'?';}).join('<br>');
-    return `<tr><td><strong>${r.nombre}</strong></td><td>Rinde: ${r.rendimiento || 1}</td><td style="font-size:.8rem">${txt}</td><td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarReceta('${r.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarReceta('${r.id}')">🗑️</button></td></tr>`;
+    return `<tr><td><strong>${r.nombre}</strong></td><td>Rinde: ${r.rendimiento || 1}</td><td style="font-size:.8rem">${txt}</td><td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarReceta(${r.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarReceta(${r.id})">🗑️</button></td></tr>`;
   }).join('');
 }
 
-// 3. PRODUCTOS (MENÚ Y COMBOS)
-function addFilaRecetaProducto() {
+// 3. PRODUCTOS / MENÚ
+function calCostoRct(id_rct) {
+  const r = recetas.find(x=>x.id===id_rct); if(!r) return 0;
+  return r.ingredientes.reduce((t, ing) => { const m=inventario.find(x=>x.id===ing.id_materia); if(!m) return t; return t + (m.costo * getConversion(ing.cantidad, ing.unidad||m.unidad, m.unidad)); }, 0);
+}
+function calCostoUnitarioRct(id_rct) { const r = recetas.find(x=>x.id===id_rct); if(!r) return 0; return calCostoRct(id_rct) / (r.rendimiento || 1); }
+
+function addFilaRecetaProducto(rItem = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
-  div.innerHTML=`<select class="proRecetaId">${recetas.map(r=>`<option value="${r.id}">${r.nombre}</option>`).join('')}</select><input type="number" class="proRecetaCant" min="1" placeholder="Cant." value="1"><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
+  div.innerHTML=`<select class="proRecetaId">${recetas.map(r=>`<option value="${r.id}" ${rItem&&rItem.id_receta===r.id?'selected':''}>${r.nombre}</option>`).join('')}</select><input type="number" class="proRecetaCant" min="1" placeholder="Cant." value="${rItem?rItem.cantidad:1}"><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
   document.getElementById('listaRecetasProducto').appendChild(div);
 }
-
 function addProducto() {
   const n=document.getElementById('proNombre').value, c=document.getElementById('proCategoria').value, p=Number(document.getElementById('proPrecio').value);
   const filas = [...document.querySelectorAll('#listaRecetasProducto .fila-ingrediente')];
-  if(!n || !filas.length) return alert('Falta nombre o recetas para el producto/combo.');
+  if(!n || !filas.length) return alert('Falta nombre o recetas para el combo.');
   
-  const rcts = filas.map(f=>({ id_receta: f.querySelector('.proRecetaId').value, cantidad: Number(f.querySelector('.proRecetaCant').value) }));
-  productos.push({id:genId(), nombre:n, categoria:c, recetas:rcts, precio_venta:p});
+  const rcts = filas.map(f=>({ id_receta: Number(f.querySelector('.proRecetaId').value), cantidad: Number(f.querySelector('.proRecetaCant').value) }));
+  
+  if (proEnEdicion) {
+    const pr = productos.find(x=>x.id===proEnEdicion);
+    if(pr) { pr.nombre=n; pr.categoria=c; pr.precio_venta=p; pr.recetas=rcts; }
+  } else {
+    productos.push({id: getNextId(productos), nombre:n, categoria:c, recetas:rcts, precio_venta:p});
+  }
   
   syncPro(); renderTodo(); 
   document.getElementById('proNombre').value=''; document.getElementById('proPrecio').value=''; document.getElementById('listaRecetasProducto').innerHTML='';
+  proEnEdicion = null; document.getElementById('btnGuardarPro').textContent = "+ Añadir al Menú";
 }
-
+function editarProducto(id) {
+  id = Number(id); const p = productos.find(x=>x.id===id); if(!p) return;
+  proEnEdicion = id;
+  document.getElementById('proNombre').value = p.nombre; document.getElementById('proCategoria').value = p.categoria; document.getElementById('proPrecio').value = p.precio_venta;
+  document.getElementById('listaRecetasProducto').innerHTML = ''; if(p.recetas) p.recetas.forEach(rItem => addFilaRecetaProducto(rItem));
+  document.getElementById('btnGuardarPro').textContent = "Actualizar Menú";
+}
+function eliminarProducto(id) {
+  if(!confirm("¿Eliminar del menú?")) return;
+  id = Number(id); productos = productos.filter(x=>x.id!==id); syncPro(); renderTodo();
+}
 function renderPro() {
   const tb = document.getElementById('tbodyPro');
-  if(!productos.length) { tb.innerHTML='<tr><td colspan="5" class="empty">Menú vacío</td></tr>'; return; }
-  
+  if(!productos.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Menú vacío</td></tr>'; return; }
   tb.innerHTML = productos.map(p=>{
-    let costoCombo = 0;
-    const detalle = p.recetas.map(rItem => {
-      const r = recetas.find(x=>x.id===rItem.id_receta);
-      costoCombo += (calCostoUnitarioRct(rItem.id_receta) * rItem.cantidad);
-      return `${rItem.cantidad}x ${r?r.nombre:'?'}`;
-    }).join('<br>');
-
-    return `<tr>
-      <td><strong>${p.nombre}</strong></td>
-      <td style="font-size:0.8rem; color:#666;">Incluye:<br>${detalle}</td>
-      <td><strong style="color:var(--sage)">$${p.precio_venta.toFixed(2)}</strong></td>
-      <td><button class="btn btn-danger btn-icon" onclick="productos=productos.filter(x=>x.id!=='${p.id}');syncPro();renderTodo();">🗑️</button></td>
-    </tr>`;
+    const detalle = p.recetas ? p.recetas.map(rItem => { const r = recetas.find(x=>x.id===rItem.id_receta); return `${rItem.cantidad}x ${r?r.nombre:'?'}`; }).join('<br>') : '';
+    return `<tr><td><strong>${p.nombre}</strong><br><span class="badge badge-gray">${p.categoria}</span></td><td style="font-size:0.8rem; color:#666;">Incluye:<br>${detalle}</td><td><strong style="color:var(--sage)">$${p.precio_venta.toFixed(2)}</strong></td><td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarProducto(${p.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarProducto(${p.id})">🗑️</button></td></tr>`;
   }).join('');
 }
 
@@ -233,7 +273,7 @@ function addItemRow() {
   updateSelects();
 }
 function updateSelects() {
-  document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${p.nombre} ($${p.precio_venta})</option>`).join(''); });
+  document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id==v?'selected':''}>${p.nombre} ($${p.precio_venta})</option>`).join(''); });
 }
 
 function agendarPedido() {
@@ -241,26 +281,25 @@ function agendarPedido() {
   const ad=stP==='Adelanto'?Number(document.getElementById('ordAdelanto').value):(stP==='Pagado'?-1:0);
   if(!c)return alert('Falta el nombre del cliente');
   
-  const items = [...document.querySelectorAll('.item-row')].map(r=>({productoId:r.querySelector('.ordProd').value, cantidad:Number(r.querySelector('.ordCant').value)}));
+  const items = [...document.querySelectorAll('.item-row')].map(r=>({productoId: Number(r.querySelector('.ordProd').value), cantidad:Number(r.querySelector('.ordCant').value)}));
   if(!items.length || items.some(i=>i.cantidad<=0)) return alert('Añade productos con cantidad válida.');
   
-  const pedidoId = genId();
+  const pedidoId = getNextId(pedidos);
   pedidos.push({id:pedidoId, cliente:c, celular:cel, items, notas:notas, fecha_pedido:fP, fecha_entrega:fE, metodo_pago:m, estado_pago:stP, adelanto:ad, estado:ESTADOS[0]});
   
   items.forEach(it => { 
-    tareas.push({id:genId(), producto_id:it.productoId, pedido_id:pedidoId, cantidad_producir:it.cantidad, fecha_limite:fE, descripcion:`Cliente: ${c}${cel?' | Tel: '+cel:''}${notas?' | Notas: '+notas:''}`, estado:'Pendiente'}); 
+    tareas.push({id: getNextId(tareas), producto_id:it.productoId, pedido_id:pedidoId, cantidad_producir:it.cantidad, fecha_limite:fE, descripcion:`Cliente: ${c}${cel?' | Tel: '+cel:''}${notas?' | Notas: '+notas:''}`, estado:'Pendiente'}); 
   });
 
   Promise.all([syncOrd(), syncTar()]).then(()=>{ 
     document.getElementById('ordenItems').innerHTML=''; document.getElementById('ordCliente').value=''; document.getElementById('ordCelular').value=''; document.getElementById('ordNotas').value=''; document.getElementById('ordAdelanto').value='';
-    renderTodo(); 
-    switchTab('historial', document.getElementById('btnTabHistorial'));
+    renderTodo(); switchTab('historial', document.getElementById('btnTabHistorial'));
     alert('✅ Venta guardada y enviada a la cocina.'); 
   });
 }
 
 function editarPedido(id) {
-  const ord = pedidos.find(x=>x.id===id); if(!ord) return;
+  id = Number(id); const ord = pedidos.find(x=>x.id===id); if(!ord) return;
   const nuevasNotas = prompt("Editar Notas del Pedido:", ord.notas);
   if(nuevasNotas !== null) {
     ord.notas = nuevasNotas;
@@ -270,7 +309,7 @@ function editarPedido(id) {
 }
 function eliminarPedido(id) {
   if(!confirm('¿Eliminar esta venta? Las tareas de cocina se borrarán.')) return;
-  tareas = tareas.filter(t => t.pedido_id !== id); pedidos = pedidos.filter(x => x.id !== id);
+  id = Number(id); tareas = tareas.filter(t => t.pedido_id !== id); pedidos = pedidos.filter(x => x.id !== id);
   Promise.all([syncOrd(), syncTar()]).then(renderTodo);
 }
 
@@ -290,20 +329,15 @@ function checkStockFaltantePedido(orden) {
       });
     });
   }
-  for(const id in reqAgregado) { const mat = inventario.find(x=>x.id===id); if(mat && mat.cantidad < reqAgregado[id]) return true; }
+  for(const id in reqAgregado) { const mat = inventario.find(x=>x.id===Number(id)); if(mat && mat.cantidad < reqAgregado[id]) return true; }
   return false;
 }
 
 function toggleSortPedidos() {
   sortByDate = !sortByDate;
   const btn = document.getElementById('btnSortOrd');
-  if(sortByDate) {
-      btn.classList.remove('btn-outline'); btn.classList.add('btn-primary');
-      btn.innerHTML = '📅 Ordenado por Cercanía';
-  } else {
-      btn.classList.add('btn-outline'); btn.classList.remove('btn-primary');
-      btn.innerHTML = '📅 Ordenar por Fecha de Entrega';
-  }
+  if(sortByDate) { btn.classList.remove('btn-outline'); btn.classList.add('btn-primary'); btn.innerHTML = '📅 Ordenado por Cercanía';
+  } else { btn.classList.add('btn-outline'); btn.classList.remove('btn-primary'); btn.innerHTML = '📅 Ordenar por Fecha de Entrega'; }
   renderOrd();
 }
 
@@ -325,11 +359,9 @@ function renderOrd() {
   tb.innerHTML = list.map(o=>{
     let tot=0; const txt=o.items.map(it=>{const p=productos.find(x=>x.id===it.productoId); if(p)tot+=p.precio_venta*it.cantidad; return `${p?p.nombre:'?'} x${it.cantidad}`;}).join('<br>');
     const adReal = o.estado_pago==='Pagado'?tot:o.adelanto;
-    const stSel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="const p=pedidos.find(x=>x.id==='${o.id}');if(p){p.estado=this.value;syncOrd();}">${ESTADOS.map(e=>`<option ${o.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
+    const stSel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="const p=pedidos.find(x=>x.id===${o.id});if(p){p.estado=this.value;syncOrd();}">${ESTADOS.map(e=>`<option ${o.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
     const avisoStock = checkStockFaltantePedido(o) ? '<span style="color:var(--rose); font-weight:bold; font-size:0.75rem;">⚠️ Falta Comprar Ingredientes</span>' : '<span style="color:var(--sage); font-size:0.75rem;">✓ Ingredientes Listos</span>';
-
-    let badgePrioridad = '';
-    if (o.estado !== 'Entregado' && o.fecha_entrega <= hoy) badgePrioridad = '<span class="badge badge-yellow" style="margin-bottom:6px;">🔥 Prioridad (Entrega)</span><br>';
+    let badgePrioridad = ''; if (o.estado !== 'Entregado' && o.fecha_entrega <= hoy) badgePrioridad = '<span class="badge badge-yellow" style="margin-bottom:6px;">🔥 Prioridad (Entrega)</span><br>';
 
     return `<tr style="${o.estado === 'Entregado' ? 'opacity: 0.6; background: #f9f9f9;' : ''}">
       <td>${badgePrioridad}<strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
@@ -337,7 +369,7 @@ function renderOrd() {
       <td style="font-size:.8rem">P: ${o.fecha_pedido}<br>E: <strong>${o.fecha_entrega}</strong></td>
       <td style="font-size:.8rem">Total: $${tot.toFixed(2)}<br>Falta: $${(tot-adReal).toFixed(2)}</td>
       <td>${stSel}</td>
-      <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarPedido('${o.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarPedido('${o.id}')">🗑️</button></td>
+      <td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarPedido(${o.id})">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarPedido(${o.id})">🗑️</button></td>
       <td>${avisoStock}</td>
     </tr>`;
   }).join('');
@@ -345,7 +377,7 @@ function renderOrd() {
 
 // 5. COCINA
 function cambiarEstadoTar(id, st) { 
-  const t = tareas.find(x=>x.id===id); if(!t)return; 
+  id = Number(id); const t = tareas.find(x=>x.id===id); if(!t)return; 
   let promises = [];
 
   if(st === 'Completado' && t.estado !== 'Completado') {
@@ -364,14 +396,14 @@ function cambiarEstadoTar(id, st) {
 
     let falta = false; let msgFalta = [];
     for(const mId in reqAgregado) {
-       const mat = inventario.find(x=>x.id===mId);
+       const mat = inventario.find(x=>x.id===Number(mId));
        if(mat && mat.cantidad < reqAgregado[mId]) { falta=true; msgFalta.push(mat.nombre); }
     }
 
     if(falta) { renderTar(); return alert('❌ IMPOSIBLE COCINAR: Faltan ingredientes en bodega:\n' + msgFalta.join(', ')); }
 
     for(const mId in reqAgregado) {
-       const mat = inventario.find(x=>x.id===mId);
+       const mat = inventario.find(x=>x.id===Number(mId));
        mat.cantidad -= reqAgregado[mId];
     }
 
@@ -419,7 +451,7 @@ function renderTar() {
           totales[t.producto_id] += t.cantidad_producir;
       });
       const htmlItems = Object.keys(totales).map(pId => {
-          const p = productos.find(x => x.id === pId);
+          const p = productos.find(x => x.id === Number(pId));
           return `<div style="display:inline-block; background:white; border:1px solid var(--caramel); padding:6px 12px; border-radius:8px; margin:4px 8px 4px 0;"><strong style="color:var(--rose); font-size:1.1rem;">${totales[pId]}x</strong> ${p ? p.nombre : '?'}</div>`;
       });
       resumenContainer.innerHTML = '<strong style="display:block; margin-bottom:10px; color:var(--brown);">Resumen Total de Producción (Pendientes):</strong>' + htmlItems.join('');
@@ -453,7 +485,7 @@ function renderTar() {
 
         let faltantes = [];
         for(const mId in reqAgregado) {
-           const mat = inventario.find(x=>x.id===mId);
+           const mat = inventario.find(x=>x.id===Number(mId));
            if(mat && mat.cantidad < reqAgregado[mId]) faltantes.push(`${mat.nombre} (Falta ${(reqAgregado[mId] - mat.cantidad).toFixed(2)}${mat.unidad})`);
         }
 
@@ -467,7 +499,7 @@ function renderTar() {
       alertasHtml = `<br><span style="color:gray;font-size:.75rem;">✓ Ingredientes descontados</span>`;
     }
 
-    const sel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="cambiarEstadoTar('${t.id}',this.value)" ${t.estado==='Completado'?'disabled':''}>${ESTADOS_TAR.map(e=>`<option ${t.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
+    const sel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="cambiarEstadoTar(${t.id},this.value)" ${t.estado==='Completado'?'disabled':''}>${ESTADOS_TAR.map(e=>`<option ${t.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
     
     const detalleCombo = p && p.recetas ? '<div style="font-size:0.8rem; color:#666; margin-top:4px;">Incluye: ' + p.recetas.map(rItem => { const r = recetas.find(x=>x.id===rItem.id_receta); return `${rItem.cantidad * t.cantidad_producir}x ${r?r.nombre:'?'}`; }).join(', ') + '</div>' : '';
 
