@@ -1,3 +1,7 @@
+// PON AQUÍ TU URL DE APPS SCRIPT
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznwikMctSh4afbtipMT3Do4yrefpT1XbDoUwzC9LOATjmTYUXMQWtGY8cCv-bndYxx/exec';
+
+// PON AQUÍ TUS CREDENCIALES DE FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyBxuYMmrJUfv28ao2hopmvp08ZRVuLnFcw",
   authDomain: "tamacakes-auth.firebaseapp.com",
@@ -8,7 +12,6 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbznwikMctSh4afbtipMT3Do4yrefpT1XbDoUwzC9LOATjmTYUXMQWtGY8cCv-bndYxx/exec';
 
 let currentUser = null;
 let inventario=[], recetas=[], productos=[], tareas=[], pedidos=[];
@@ -17,6 +20,9 @@ const ESTADOS = ['Agendado','Realizando','Listo para entrega','Entregado'];
 const ESTADOS_TAR = ['Pendiente','En progreso','Completado'];
 const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 
+// ==========================================
+// VIGILANTE DE SESIÓN FIREBASE (Limpio)
+// ==========================================
 auth.onAuthStateChanged((user) => {
   if (user) {
     document.getElementById('app').style.display = 'none';
@@ -95,36 +101,31 @@ function addMateriaPrima() {
   const n=document.getElementById('invNombre').value, c=document.getElementById('invCategoria').value, u=document.getElementById('invUnidad').value, q=Number(document.getElementById('invCantidad').value);
   if(!n) return;
   inventario.push({id:genId(), nombre:n, categoria:c, unidad:u, cantidad:q});
-  syncInv(); renderTodo();
+  syncInv(); renderTodo(); document.getElementById('invNombre').value=''; document.getElementById('invCantidad').value='';
 }
 function renderInv() {
   const tb = document.getElementById('tbodyInv');
   if(!inventario.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Sin ingredientes</td></tr>'; return; }
-  tb.innerHTML = inventario.map(m=>`<tr><td><strong>${m.nombre}</strong></td><td><span class="badge badge-gray">${m.categoria}</span></td><td style="${m.cantidad<5?'color:red;font-weight:bold':''}">${m.cantidad.toFixed(2)} ${m.unidad}</td><td><button class="btn btn-danger btn-icon" onclick="inventario=inventario.filter(x=>x.id!=='${m.id}');syncInv();renderTodo();">🗑️</button></td></tr>`).join('');
+  tb.innerHTML = inventario.map(m=>`<tr><td><strong>${m.nombre}</strong></td><td><span class="badge badge-gray">${m.categoria}</span></td><td style="${m.cantidad<5?'color:var(--rose);font-weight:bold':''}">${m.cantidad.toFixed(2)} ${m.unidad}</td><td><button class="btn btn-danger btn-icon" onclick="inventario=inventario.filter(x=>x.id!=='${m.id}');syncInv();renderTodo();">🗑️</button></td></tr>`).join('');
 }
 
 // 2. RECETAS
 function addFilaIngrediente(ingData = null) {
   const div = document.createElement('div'); div.className='fila-ingrediente';
-  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (Bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
+  div.innerHTML=`<select class="rctMateria">${inventario.map(m=>`<option value="${m.id}" ${ingData&&ingData.id_materia===m.id?'selected':''}>${m.nombre} (En bodega: ${m.cantidad.toFixed(2)}${m.unidad})</option>`).join('')}</select><input type="number" step="0.01" class="rctCant" placeholder="Cant." value="${ingData?ingData.cantidad:''}"><select class="rctUnidad"><option value="g" ${ingData&&ingData.unidad==='g'?'selected':''}>g</option><option value="kg" ${ingData&&ingData.unidad==='kg'?'selected':''}>kg</option><option value="ml" ${ingData&&ingData.unidad==='ml'?'selected':''}>ml</option><option value="L" ${ingData&&ingData.unidad==='L'?'selected':''}>L</option><option value="unidades" ${ingData&&ingData.unidad==='unidades'?'selected':''}>uds</option></select><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
   document.getElementById('listaIngredientesReceta').appendChild(div);
 }
-
 function guardarReceta() {
   const nom = document.getElementById('rctNombre').value, rend = Number(document.getElementById('rctRendimiento').value) || 1;
   const filas = [...document.querySelectorAll('.fila-ingrediente')];
   if(!nom || !filas.length) return alert('Falta nombre o ingredientes.');
-
   const ings = filas.map(f=>({ id_materia: f.querySelector('.rctMateria').value, cantidad: Number(f.querySelector('.rctCant').value), unidad: f.querySelector('.rctUnidad').value }));
-
   if(recetaEnEdicion) recetas = recetas.filter(r=>r.id!==recetaEnEdicion);
   recetas.push({id: recetaEnEdicion || genId(), nombre:nom, rendimiento:rend, ingredientes:ings});
-
   document.getElementById('rctNombre').value=''; document.getElementById('rctRendimiento').value='1'; document.getElementById('listaIngredientesReceta').innerHTML='';
   recetaEnEdicion = null; document.getElementById('btnGuardarReceta').textContent = "Guardar Receta";
   syncRct().then(renderTodo);
 }
-
 function editarReceta(id) {
   const r = recetas.find(x=>x.id===id); if(!r) return;
   recetaEnEdicion = id; document.getElementById('rctNombre').value = r.nombre; document.getElementById('rctRendimiento').value = r.rendimiento || 1;
@@ -132,25 +133,24 @@ function editarReceta(id) {
   document.getElementById('btnGuardarReceta').textContent = "Actualizar Receta";
 }
 function eliminarReceta(id) {
-  if(!confirm("¿Eliminar receta de la base de datos?")) return;
+  if(!confirm("¿Eliminar receta?")) return;
   recetas = recetas.filter(x=>x.id!==id); syncRct().then(renderTodo);
 }
-
 function renderRct() {
   const tb = document.getElementById('tbodyRct');
   if(!recetas.length) { tb.innerHTML='<tr><td colspan="4" class="empty">Sin recetas</td></tr>'; return; }
   tb.innerHTML = recetas.map(r=>{
     const txt = r.ingredientes.map(i=>{const m=inventario.find(x=>x.id===i.id_materia); return m?`${i.cantidad}${i.unidad||m.unidad} ${m.nombre}`:'?';}).join('<br>');
-    return `<tr><td><strong>${r.nombre}</strong></td><td>Rinde: ${r.rendimiento || 1} uds</td><td style="font-size:.8rem">${txt}</td><td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarReceta('${r.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarReceta('${r.id}')">🗑️</button></td></tr>`;
+    return `<tr><td><strong>${r.nombre}</strong></td><td>Rinde: ${r.rendimiento || 1}</td><td style="font-size:.8rem">${txt}</td><td><button class="btn btn-outline btn-icon" style="margin-right:5px;" onclick="editarReceta('${r.id}')">✏️</button><button class="btn btn-danger btn-icon" onclick="eliminarReceta('${r.id}')">🗑️</button></td></tr>`;
   }).join('');
 }
 
-// 3. PRODUCTOS (MENÚ)
+// 3. PRODUCTOS
 function addProducto() {
   const n=document.getElementById('proNombre').value, c=document.getElementById('proCategoria').value, r=document.getElementById('proReceta').value, p=Number(document.getElementById('proPrecio').value);
   if(!n||!r)return;
   productos.push({id:genId(), nombre:n, categoria:c, id_receta:r, precio_venta:p});
-  syncPro(); renderTodo();
+  syncPro(); renderTodo(); document.getElementById('proNombre').value=''; document.getElementById('proPrecio').value='';
 }
 function renderPro() {
   const tb = document.getElementById('tbodyPro');
@@ -159,25 +159,25 @@ function renderPro() {
 }
 
 // 4. VENTAS
-function toggleAdelanto() { document.getElementById('divAdelanto').style.display = document.getElementById('ordEstadoPago').value==='Adelanto'?'block':'none'; }
+function toggleAdelanto() { document.getElementById('divAdelanto').style.display = document.getElementById('ordEstadoPago').value==='Adelanto'?'flex':'none'; }
 function addItemRow() {
   const div=document.createElement('div'); div.className='item-row';
-  div.innerHTML=`<select class="ordProd" style="padding:5px; margin-right:5px; border-radius:8px; border:1px solid var(--border);">${productos.map(p=>`<option value="${p.id}">${p.nombre} ($${p.precio_venta})</option>`).join('')}</select><input type="number" class="ordCant" min="1" placeholder="Cant" style="width:70px; padding:5px; margin-right:5px; border-radius:8px; border:1px solid var(--border);"><button class="btn btn-outline btn-icon" onclick="this.parentElement.remove()">X</button>`;
+  div.innerHTML=`<div class="fg"><label>Producto</label><select class="ordProd"></select></div><div class="fg"><label>Cant</label><input type="number" class="ordCant" min="1" placeholder="1"></div><button class="btn btn-outline btn-sm btn-icon" style="align-self:flex-end" onclick="this.parentElement.remove()">✕</button>`;
   document.getElementById('ordenItems').appendChild(div);
+  updateSelects();
 }
 function updateSelects() {
   const rSel=document.getElementById('proReceta'); if(rSel) rSel.innerHTML=recetas.map(r=>`<option value="${r.id}">${r.nombre}</option>`).join('');
-  document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${p.nombre}</option>`).join(''); });
+  document.querySelectorAll('.ordProd').forEach(s=>{ const v=s.value; s.innerHTML=productos.map(p=>`<option value="${p.id}" ${p.id===v?'selected':''}>${p.nombre} ($${p.precio_venta})</option>`).join(''); });
 }
 
-// ✅ EL BLOQUEO FUE ELIMINADO. PASA DIRECTO.
 function agendarPedido() {
   const c=document.getElementById('ordCliente').value, cel=document.getElementById('ordCelular').value, fE=document.getElementById('ordFechaEnt').value, fP=document.getElementById('ordFechaPed').value, m=document.getElementById('ordMetodo').value, stP=document.getElementById('ordEstadoPago').value, notas=document.getElementById('ordNotas').value;
   const ad=stP==='Adelanto'?Number(document.getElementById('ordAdelanto').value):(stP==='Pagado'?-1:0);
   if(!c)return alert('Falta el nombre del cliente');
   
   const items = [...document.querySelectorAll('.item-row')].map(r=>({productoId:r.querySelector('.ordProd').value, cantidad:Number(r.querySelector('.ordCant').value)}));
-  if(!items.length || items.some(i=>i.cantidad<=0)) return alert('Ingresa cantidades válidas.');
+  if(!items.length || items.some(i=>i.cantidad<=0)) return alert('Añade productos con cantidad válida.');
   
   const pedidoId = genId();
   pedidos.push({id:pedidoId, cliente:c, celular:cel, items, notas:notas, fecha_pedido:fP, fecha_entrega:fE, metodo_pago:m, estado_pago:stP, adelanto:ad, estado:ESTADOS[0]});
@@ -187,10 +187,10 @@ function agendarPedido() {
   });
 
   Promise.all([syncOrd(), syncTar()]).then(()=>{ 
-    document.getElementById('ordenItems').innerHTML=''; addItemRow(); 
-    document.getElementById('ordCliente').value=''; document.getElementById('ordCelular').value=''; 
-    document.getElementById('ordNotas').value=''; document.getElementById('ordAdelanto').value='';
-    renderTodo(); alert('✅ Venta guardada con éxito.'); 
+    document.getElementById('ordenItems').innerHTML=''; document.getElementById('ordCliente').value=''; document.getElementById('ordCelular').value=''; document.getElementById('ordNotas').value=''; document.getElementById('ordAdelanto').value='';
+    renderTodo(); 
+    switchTab('historial', document.getElementById('btnTabHistorial'));
+    alert('✅ Venta guardada y enviada a la cocina.'); 
   });
 }
 
@@ -203,20 +203,16 @@ function editarPedido(id) {
     Promise.all([syncOrd(), syncTar()]).then(renderTodo);
   }
 }
-
 function eliminarPedido(id) {
-  if(!confirm('¿Eliminar esta venta? Las órdenes de cocina se borrarán.')) return;
-  tareas = tareas.filter(t => t.pedido_id !== id);
-  pedidos = pedidos.filter(x => x.id !== id);
+  if(!confirm('¿Eliminar esta venta? Las tareas de cocina se borrarán.')) return;
+  tareas = tareas.filter(t => t.pedido_id !== id); pedidos = pedidos.filter(x => x.id !== id);
   Promise.all([syncOrd(), syncTar()]).then(renderTodo);
 }
 
-// Función que revisa si UNA ORDEN en particular no tiene stock para sus tareas pendientes
 function checkStockFaltantePedido(orden) {
   if (orden.estado === 'Entregado' || orden.estado === 'Listo para entrega') return false;
   let matNecesaria = {};
   let tareasPendientes = tareas.filter(t => t.pedido_id === orden.id && t.estado !== 'Completado');
-  
   for(const t of tareasPendientes) {
     const p = productos.find(x=>x.id===t.producto_id); if(!p) continue;
     const rct = recetas.find(x=>x.id===p.id_receta); if(!rct) continue;
@@ -226,23 +222,21 @@ function checkStockFaltantePedido(orden) {
       if(!matNecesaria[mat.id]) matNecesaria[mat.id] = 0; matNecesaria[mat.id] += req;
     });
   }
-  for(const id in matNecesaria) {
-    const mat = inventario.find(x=>x.id===id);
-    if(mat && mat.cantidad < matNecesaria[id]) return true; // Falta stock
-  }
+  for(const id in matNecesaria) { const mat = inventario.find(x=>x.id===id); if(mat && mat.cantidad < matNecesaria[id]) return true; }
   return false;
 }
 
 function renderOrd() {
   const tb = document.getElementById('tbodyOrd');
-  if(!pedidos.length) { tb.innerHTML='<tr><td colspan="7" class="empty">Sin ventas registradas</td></tr>'; return; }
+  const kw = document.getElementById('filtroOrd') ? document.getElementById('filtroOrd').value.toLowerCase() : '';
+  const list = pedidos.filter(o=>o.cliente.toLowerCase().includes(kw));
+  if(!list.length) { tb.innerHTML='<tr><td colspan="7" class="empty">Sin registros</td></tr>'; return; }
   
-  tb.innerHTML = pedidos.map(o=>{
+  tb.innerHTML = list.map(o=>{
     let tot=0; const txt=o.items.map(it=>{const p=productos.find(x=>x.id===it.productoId); if(p)tot+=p.precio_venta*it.cantidad; return `${p?p.nombre:'?'} x${it.cantidad}`;}).join('<br>');
     const adReal = o.estado_pago==='Pagado'?tot:o.adelanto;
     const stSel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="const p=pedidos.find(x=>x.id==='${o.id}');if(p){p.estado=this.value;syncOrd();}">${ESTADOS.map(e=>`<option ${o.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
-    
-    const avisoStock = checkStockFaltantePedido(o) ? '<span style="color:var(--rose); font-weight:bold; font-size:0.75rem;">⚠️ Falta Stock</span>' : '<span style="color:var(--sage); font-size:0.75rem;">✓ Listo</span>';
+    const avisoStock = checkStockFaltantePedido(o) ? '<span style="color:var(--rose); font-weight:bold; font-size:0.75rem;">⚠️ Falta Comprar Ingredientes</span>' : '<span style="color:var(--sage); font-size:0.75rem;">✓ Ingredientes Listos</span>';
 
     return `<tr>
       <td><strong>${o.cliente}</strong><br><span style="font-size:0.75rem; color:#888;">${o.celular?'📱 '+o.celular+'<br>':''}${o.notas?'📝 '+o.notas:''}</span></td>
@@ -256,14 +250,15 @@ function renderOrd() {
   }).join('');
 }
 
-// 5. COCINA Y ANÁLISIS DE STOCK EN VIVO
+// 5. COCINA (AUTOMATIZADA Y VINCULADA)
 function cambiarEstadoTar(id, st) { 
   const t = tareas.find(x=>x.id===id); if(!t)return; 
-  
+  let promises = [];
+
   if(st === 'Completado' && t.estado !== 'Completado') {
     const p = productos.find(x=>x.id===t.producto_id);
     const rct = recetas.find(x=>x.id===p?.id_receta);
-    if(!rct) return alert('No se puede completar: Producto sin receta.');
+    if(!rct) return alert('Error: Producto sin receta.');
 
     let falta = false; let msgFalta = [];
     rct.ingredientes.forEach(ing => {
@@ -273,12 +268,8 @@ function cambiarEstadoTar(id, st) {
       if(mat.cantidad < req) { falta = true; msgFalta.push(mat.nombre); }
     });
 
-    if(falta) {
-      renderTodo(); // Reinicia el select visualmente
-      return alert('❌ IMPOSIBLE COCINAR: Te faltan ingredientes en bodega:\n' + msgFalta.join(', '));
-    }
+    if(falta) { renderTar(); return alert('❌ IMPOSIBLE COCINAR: Faltan ingredientes en bodega:\n' + msgFalta.join(', ')); }
 
-    // SI TIENE STOCK, Descuenta
     rct.ingredientes.forEach(ing => {
       const mat = inventario.find(x=>x.id===ing.id_materia);
       const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
@@ -286,11 +277,23 @@ function cambiarEstadoTar(id, st) {
     });
 
     t.estado = 'Completado';
-    Promise.all([syncTar(), syncInv()]).then(renderTodo);
+    promises.push(syncInv());
 
   } else {
-    t.estado = st; syncTar().then(renderTodo); 
+    t.estado = st; 
   }
+
+  // ⭐ MAGIA: SI LA COCINA PONE "EN PROGRESO", LA VENTA PASA A "REALIZANDO"
+  if (st === 'En progreso' && t.pedido_id) {
+    const ord = pedidos.find(o => o.id === t.pedido_id);
+    if (ord && ord.estado !== 'Realizando') {
+      ord.estado = 'Realizando';
+      promises.push(syncOrd());
+    }
+  }
+
+  promises.push(syncTar());
+  Promise.all(promises).then(renderTodo); 
 }
 
 function renderTar() {
@@ -304,24 +307,23 @@ function renderTar() {
     
     let alertasHtml = '';
     if (t.estado !== 'Completado') {
-      if(!rct) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Producto sin receta vinculada</span>'; } 
+      if(!rct) { alertasHtml = '<br><span style="color:red;font-size:.75rem;">⚠️ Producto sin receta</span>'; } 
       else {
         let faltantes = [];
         rct.ingredientes.forEach(ing => {
           const mat = inventario.find(x=>x.id===ing.id_materia);
-          if(!mat) { faltantes.push('Ingrediente borrado'); return; }
+          if(!mat) return;
           const req = getConversion(ing.cantidad, ing.unidad||mat.unidad, mat.unidad) * (t.cantidad_producir / (rct.rendimiento || 1));
           if (mat.cantidad < req) { faltantes.push(`${mat.nombre} (Falta ${(req - mat.cantidad).toFixed(2)}${mat.unidad})`); }
         });
-        
         if (faltantes.length > 0) {
-          alertasHtml = `<br><div style="background:#ffebeb; color:var(--rose); padding:6px; border-radius:6px; font-size:.75rem; margin-top:5px; line-height: 1.4;"><strong>Falta comprar:</strong><br>- ${faltantes.join('<br>- ')}</div>`;
+          alertasHtml = `<br><div style="background:#ffebeb; color:var(--rose); padding:6px; border-radius:6px; font-size:.75rem; margin-top:5px;"><strong>Falta comprar:</strong><br>- ${faltantes.join('<br>- ')}</div>`;
         } else {
-          alertasHtml = `<br><div style="background:#e6f4ea; color:#1e8e3e; padding:6px; border-radius:6px; font-size:.75rem; margin-top:5px;"><strong>🟢 Stock Listo para cocinar</strong></div>`;
+          alertasHtml = `<br><div style="background:#e6f4ea; color:#1e8e3e; padding:6px; border-radius:6px; font-size:.75rem; margin-top:5px;"><strong>🟢 Stock Listo</strong></div>`;
         }
       }
     } else {
-      alertasHtml = `<br><span style="color:gray;font-size:.75rem;">✓ Ingredientes ya descontados</span>`;
+      alertasHtml = `<br><span style="color:gray;font-size:.75rem;">✓ Ingredientes descontados</span>`;
     }
 
     const sel = `<select style="font-family:var(--font-b); border-radius:6px; padding:4px;" onchange="cambiarEstadoTar('${t.id}',this.value)" ${t.estado==='Completado'?'disabled':''}>${ESTADOS_TAR.map(e=>`<option ${t.estado===e?'selected':''}>${e}</option>`).join('')}</select>`;
