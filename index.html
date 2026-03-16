@@ -80,9 +80,10 @@
         <div class="card-title">Crear / Editar Receta</div>
         <div class="form-grid" style="margin-bottom:1rem;">
           <div class="fg"><label>Nombre de Receta</label><input type="text" id="rctNombre" placeholder="Ej: Masa Vainilla"></div>
+          <div class="fg"><label>Rendimiento (Cant. que produce)</label><input type="number" id="rctRendimiento" min="1" value="1" placeholder="Ej: 12"></div>
         </div>
         <div style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--border);">
-          <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios:</label>
+          <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios para toda la masa:</label>
           <div id="listaIngredientesReceta" style="margin-top:10px;"></div>
           <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente a la lista</button>
         </div>
@@ -90,7 +91,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Receta</th><th>Ingredientes Requeridos</th><th>Costo Prep.</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Receta</th><th>Rendimiento</th><th>Costo Receta Entera</th><th>Costo Unitario</th><th>Acciones</th></tr></thead>
           <tbody id="tbodyRct"></tbody>
         </table>
       </div>
@@ -99,9 +100,9 @@
     <div class="tab-pane" id="tab-pro">
       <div class="card">
         <div class="card-title">Crear Producto para el Menú</div>
-        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">Añade los productos que ofreces. El sistema no lleva stock de estos porque se preparan bajo pedido.</p>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">Añade los productos que ofreces. El sistema calculará el costo de hacer UN SOLO pastel en base al rendimiento de la receta.</p>
         <div class="form-grid">
-          <div class="fg"><label>Nombre Producto</label><input type="text" id="proNombre"></div>
+          <div class="fg"><label>Nombre Producto</label><input type="text" id="proNombre" placeholder="Ej: 1 Cupcake de Vainilla"></div>
           <div class="fg"><label>Categoría</label><input type="text" id="proCategoria"></div>
           <div class="fg"><label>Receta Vinculada</label><select id="proReceta"></select></div>
           <div class="fg"><label>Precio Venta ($)</label><input type="number" step="0.01" id="proPrecio"></div>
@@ -110,7 +111,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Producto</th><th>Categoría</th><th>Costo (Receta)</th><th>Precio Venta</th><th>Margen Ganancia</th><th>Acción</th></tr></thead>
+          <thead><tr><th>Producto</th><th>Categoría</th><th>Costo Unitario</th><th>Precio Venta</th><th>Margen Ganancia</th><th>Acción</th></tr></thead>
           <tbody id="tbodyPro"></tbody>
         </table>
       </div>
@@ -119,7 +120,7 @@
     <div class="tab-pane" id="tab-ord">
       <div class="card">
         <div class="card-title">Agendar Nuevo Pedido</div>
-        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">El sistema verificará automáticamente si hay materia prima suficiente en bodega para aceptar este pedido.</p>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">El sistema verificará automáticamente si hay materia prima suficiente en bodega calculando proporciones de las recetas.</p>
         <div class="form-grid" style="border-bottom:1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
           <div class="fg"><label>Cliente</label><input type="text" id="ordCliente"></div>
           <div class="fg"><label>Fecha Entrega</label><input type="date" id="ordFechaEnt"></div>
@@ -146,7 +147,7 @@
       <div class="card">
         <div class="card-title">👨‍🍳 Órdenes de Producción</div>
         <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">
-          Aquí aparecen los productos que debes preparar para cumplir con los pedidos. (Los ingredientes ya fueron descontados de bodega al aceptar la venta).
+          Aquí aparecen los productos que debes preparar. (La fracción exacta de los ingredientes ya fue descontada de bodega al aceptar la venta).
         </p>
         <div class="table-wrap">
           <table>
