@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TamaCakes — Producción</title>
+  <title>TamaCakes — Producción y Ventas</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,6 +16,7 @@
   <div class="login-card">
     <div class="login-logo">Tama<span>Cakes</span></div>
     <p class="login-sub">Gestión Bajo Pedido</p>
+    
     <div class="fg" style="margin-bottom:1rem; text-align:left;">
        <input type="email" id="loginEmail" placeholder="Correo electrónico">
     </div>
@@ -127,9 +128,10 @@
           <div class="fg"><label>Celular (Opcional)</label><input type="text" id="ordCelular" placeholder="Ej: 0991234567"></div>
           <div class="fg"><label>Fecha Entrega</label><input type="date" id="ordFechaEnt"></div>
           <div class="fg"><label>Notas Especiales</label><input type="text" id="ordNotas" placeholder="Ej: Sin nueces, para regalo..."></div>
+          <div class="fg"><label>Forma de Pago</label><select id="ordMetodo"><option value="Efectivo">Efectivo</option><option value="Transferencia">Transferencia</option></select></div>
           <div class="fg"><label>Estado Pago</label><select id="ordEstadoPago" onchange="toggleAdelanto()"><option>Por pagar</option><option value="Adelanto">Adelanto</option><option>Pagado</option></select></div>
           <div class="fg" id="divAdelanto" style="display:none;"><label>Monto Adelanto</label><input type="number" id="ordAdelanto" placeholder="0.00"></div>
-          <input type="hidden" id="ordMetodo" value="Efectivo"><input type="hidden" id="ordFechaPed">
+          <input type="hidden" id="ordFechaPed">
         </div>
       </div>
       <div class="card" style="border-top: 4px solid var(--caramel);">
