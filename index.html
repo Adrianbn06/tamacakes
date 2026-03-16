@@ -89,7 +89,7 @@
         <div style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--border);">
           <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios para toda la preparación:</label>
           <div id="listaIngredientesReceta" style="margin-top:10px;"></div>
-          <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente</button>
+          <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente a la fórmula</button>
         </div>
         <button id="btnGuardarReceta" class="btn btn-primary" style="margin-top:1rem;" onclick="guardarReceta()">Guardar Receta</button>
       </div>
@@ -146,9 +146,12 @@
 
     <div class="tab-pane" id="tab-historial">
       <div class="card">
-        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
           <span>Registros de Ventas</span>
-          <input type="text" id="filtroOrd" class="search-box" placeholder="🔍 Buscar venta..." oninput="renderTablaOrd()">
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button id="btnSortOrd" class="btn btn-outline btn-sm" onclick="toggleSortPedidos()">📅 Ordenar por Fecha de Entrega</button>
+            <input type="text" id="filtroOrd" class="search-box" style="width: 150px;" placeholder="🔍 Buscar venta..." oninput="renderTablaOrd()">
+          </div>
         </div>
         <div class="table-wrap">
           <table>
@@ -162,7 +165,11 @@
     <div class="tab-pane" id="tab-tar">
       <div class="card">
         <div class="card-title">👨‍🍳 Órdenes de Cocina</div>
-        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">⚠️ Al marcar una orden como "En progreso", la venta pasará a estado "Realizando" automáticamente. Al marcar "Completado", se descontarán los ingredientes.</p>
+        
+        <div id="resumenCocina" style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--caramel); margin-bottom:1.5rem; font-size:0.9rem;">
+          </div>
+
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">⚠️ Al marcar una orden como "En progreso", la venta pasará a "Realizando". Al marcar "Completado", la venta pasará a "Listo para entrega" y se descontarán los ingredientes.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Cant. a Preparar / Análisis de Stock</th><th>Para Cuándo</th><th>Cliente y Detalles</th><th>Estado de Cocina</th></tr></thead>
