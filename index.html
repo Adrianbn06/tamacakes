@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TamaCakes — Producción</title>
+  <title>TamaCakes — Producción Estaciones</title>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,7 +15,7 @@
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo">Tama<span>Cakes</span></div>
-    <p class="login-sub">Gestión Bajo Pedido</p>
+    <p class="login-sub">Gestión de Producción</p>
     <div class="fg" style="margin-bottom:1rem; text-align:left;">
        <input type="email" id="loginEmail" placeholder="Correo electrónico">
     </div>
@@ -31,7 +31,7 @@
 
 <div id="app">
   <div class="topbar">
-    <div class="topbar-brand">TamaCakes <small>Gestión Empresarial</small></div>
+    <div class="topbar-brand">TamaCakes <small>Producción por Estaciones</small></div>
     <div class="topbar-user">
       <span id="userName"></span>
       <button class="btn-logout" onclick="logout()">Salir</button>
@@ -51,13 +51,12 @@
       <button class="tab-btn" onclick="switchTab('pro',this)">🍰 Menú (Catálogo)</button>
       <button class="tab-btn" onclick="switchTab('nuevaventa',this)">🛍️ Nueva Venta</button>
       <button class="tab-btn" id="btnTabHistorial" onclick="switchTab('historial',this)">📋 Registros</button>
-      <button class="tab-btn" onclick="switchTab('tar',this)">👨‍🍳 Cocina</button>
+      <button class="tab-btn" onclick="switchTab('tar',this)">👨‍🍳 Cocina (Estaciones)</button>
     </div>
 
     <div class="tab-pane active" id="tab-inv">
       <div class="card">
         <div class="card-title">Registrar / Actualizar Ingrediente</div>
-        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">El sistema reconoce mayúsculas o minúsculas. Si escribes un ingrediente que ya existe, se SUMARÁ al stock y se guardará la fecha en su historial.</p>
         <div class="form-grid">
           <div class="fg"><label>Nombre</label><input type="text" id="invNombre" placeholder="Ej: Harina"></div>
           <div class="fg">
@@ -82,9 +81,11 @@
 
     <div class="tab-pane" id="tab-rct">
       <div class="card">
-        <div class="card-title">Crear / Editar Receta</div>
+        <div class="card-title">Crear / Editar Receta de Producción</div>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">Asigna quién es el empleado responsable de preparar esta receta. La orden llegará directo a su estación de trabajo.</p>
         <div class="form-grid" style="margin-bottom:1rem;">
           <div class="fg"><label>Nombre de Receta</label><input type="text" id="rctNombre" placeholder="Ej: Masa Vainilla"></div>
+          <div class="fg"><label>Pastelero Encargado</label><input type="text" id="rctEncargado" placeholder="Ej: Ana, Juan, General..."></div>
           <div class="fg"><label>Rendimiento (Cant. que produce)</label><input type="number" id="rctRendimiento" min="1" value="1" placeholder="Ej: 12"></div>
         </div>
         <div style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--border);">
@@ -96,7 +97,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Receta</th><th>Rendimiento</th><th>Ingredientes (Fórmula)</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Receta / Estación</th><th>Rendimiento</th><th>Ingredientes (Fórmula)</th><th>Acciones</th></tr></thead>
           <tbody id="tbodyRct"></tbody>
         </table>
       </div>
@@ -119,7 +120,7 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Producto / Combo</th><th>Contenido</th><th>Precio Venta</th><th>Acciones</th></tr></thead>
+          <thead><tr><th>Producto / Combo</th><th>Contenido de Producción</th><th>Precio Venta</th><th>Acciones</th></tr></thead>
           <tbody id="tbodyPro"></tbody>
         </table>
       </div>
@@ -141,6 +142,7 @@
       </div>
       <div class="card" style="border-top: 4px solid var(--caramel);">
         <div class="card-title">2. Añada los productos</div>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">El sistema descompondrá automáticamente la venta y enviará las órdenes individuales de preparación a las estaciones de cocina correspondientes.</p>
         <div id="ordenItems"></div>
         <div style="display:flex; gap:.6rem; margin-top:1rem;">
           <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir producto a la lista</button>
@@ -169,11 +171,21 @@
 
     <div class="tab-pane" id="tab-tar">
       <div class="card">
-        <div class="card-title">👨‍🍳 Órdenes de Cocina</div>
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+          <span>👨‍🍳 Tareas por Estación de Trabajo</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <label style="font-size:0.8rem; color:#9c7a60; font-weight:bold;">Filtrar por Empleado:</label>
+            <select id="filtroCocinaEncargado" onchange="renderTar()" style="padding:6px; border-radius:8px; border:1px solid var(--border); outline:none;">
+              <option value="Todos">Todas las estaciones</option>
+              </select>
+          </div>
+        </div>
+        
         <div id="resumenCocina" style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--caramel); margin-bottom:1.5rem; font-size:0.9rem;"></div>
+        
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Cant. a Preparar / Análisis de Stock</th><th>Para Cuándo</th><th>Cliente y Detalles</th><th>Estado de Cocina</th></tr></thead>
+            <thead><tr><th>Cant. Receta a Preparar / Análisis Stock</th><th>Para Cuándo / Cliente</th><th>Estación (Empleado)</th><th>Estado</th></tr></thead>
             <tbody id="tbodyTar"></tbody>
           </table>
         </div>
