@@ -97,9 +97,9 @@
           <div class="fg"><label>Rendimiento (Cant. que produce)</label><input type="number" id="rctRendimiento" min="1" value="1" placeholder="Ej: 12"></div>
         </div>
         <div style="background:var(--light); padding:1rem; border-radius:10px; border:1px dashed var(--border);">
-          <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios:</label>
+          <label style="font-size:.75rem; font-weight:500; color:#9c7a60; text-transform:uppercase;">Ingredientes Necesarios para toda la preparación:</label>
           <div id="listaIngredientesReceta" style="margin-top:10px;"></div>
-          <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente</button>
+          <button class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="addFilaIngrediente()">+ Añadir ingrediente a la fórmula</button>
         </div>
         <button id="btnGuardarReceta" class="btn btn-primary" style="margin-top:1rem;" onclick="guardarReceta()">Guardar Receta</button>
       </div>
@@ -132,8 +132,8 @@
 
     <div class="tab-pane" id="tab-ord">
       <div class="card">
-        <div class="card-title">Agendar Venta</div>
-        <div class="form-grid" style="border-bottom:1px solid var(--border); padding-bottom:1rem; margin-bottom:1rem;">
+        <div class="card-title">1. Datos del Cliente y Pago</div>
+        <div class="form-grid">
           <div class="fg"><label>Cliente</label><input type="text" id="ordCliente"></div>
           <div class="fg"><label>Fecha Entrega</label><input type="date" id="ordFechaEnt"></div>
           <div class="fg"><label>Notas Especiales</label><input type="text" id="ordNotas" placeholder="Ej: Sin nueces, para regalo..."></div>
@@ -141,12 +141,18 @@
           <div class="fg" id="divAdelanto" style="display:none;"><label>Monto Adelanto</label><input type="number" id="ordAdelanto"></div>
           <input type="hidden" id="ordMetodo" value="Efectivo"><input type="hidden" id="ordFechaPed">
         </div>
+      </div>
+      
+      <div class="card" style="border-top: 4px solid var(--caramel);">
+        <div class="card-title">2. Añada los productos</div>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">Agrega los pasteles a vender. La cocina te avisará si falta materia prima para prepararlos.</p>
         <div id="ordenItems"></div>
         <div style="display:flex; gap:.6rem; margin-top:1rem;">
-          <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir producto</button>
-          <button class="btn btn-success" onclick="agendarPedido()">✓ Aprobar y Enviar a Cocina</button>
+          <button class="btn btn-outline btn-sm" onclick="addItemRow()">+ Añadir producto a la lista</button>
+          <button class="btn btn-success" onclick="agendarPedido()">✓ Guardar Venta y Enviar a Cocina</button>
         </div>
       </div>
+
       <div class="table-wrap">
         <table>
           <thead><tr><th>Cliente / Notas</th><th>Productos</th><th>Fechas</th><th>Finanzas</th><th>Estado</th><th>Acciones</th></tr></thead>
@@ -158,10 +164,10 @@
     <div class="tab-pane" id="tab-tar">
       <div class="card">
         <div class="card-title">👨‍🍳 Órdenes de Cocina</div>
-        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">Cantidades exactas a preparar para cumplir con las ventas.</p>
+        <p style="font-size:.85rem; color:#9c7a60; margin-bottom:1rem;">El sistema analiza tu bodega. Solo podrás marcar una tarea como "Completada" si tienes stock suficiente. Al completarla, se descontarán los ingredientes.</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Cant. / Producto a Preparar</th><th>Para Cuándo</th><th>Instrucciones Especiales</th><th>Estado</th></tr></thead>
+            <thead><tr><th>Cant. a Preparar / Análisis de Stock</th><th>Para Cuándo</th><th>Instrucciones Especiales</th><th>Estado</th></tr></thead>
             <tbody id="tbodyTar"></tbody>
           </table>
         </div>
